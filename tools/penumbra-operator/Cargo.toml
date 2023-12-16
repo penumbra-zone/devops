@@ -1,0 +1,43 @@
+[package]
+name = "penumbra-operator"
+version = "0.1.1-alpha.0"
+edition = "2021"
+default-run = "penumbra-operator"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+doc = false
+name = "penumbra-operator"
+path = "src/main.rs"
+
+# CRD-generating command via https://github.com/kube-rs/controller-rs example repo.
+[[bin]]
+doc = false
+name = "crdgen"
+path = "src/crdgen.rs"
+
+[dependencies]
+anyhow = "1.0.81"
+futures = "0.3.29"
+futures-util = "0.3.30"
+hex = "0.4.3"
+# Run `kubectl version` and make sure features match!
+k8s-openapi = { version = "0.24.0", features = ["v1_30"] }
+# k8s-openapi-derive = "0.21.1"
+kube = { version = "0.98.0", features = ["derive", "runtime"] }
+kube-derive = "0.88.1"
+rand = "0.8.5"
+rand_core = "0.6.4"
+schemars = "0.8.16"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+serde_yaml = "0.9.31"
+thiserror = "1.0.58"
+tokio = { version = "*", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+
+[dev-dependencies]
+escargot = "0.5.13"

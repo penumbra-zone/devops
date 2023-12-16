@@ -1,0 +1,37 @@
+# run the penumbra-operator against the present k8s context
+run:
+  cargo run
+
+# run cargo check
+check:
+  cargo check --all-targets --all-features
+
+# build all targets
+build:
+  @just check
+  cargo build --all-targets --all-features
+  cargo build -r
+  cargo doc
+
+doc:
+  @just docs
+
+# build rust documentation, serve via livereload
+docs:
+    cargo watch -w src -c -s "cargo doc && python3 -m http.server --directory target/doc"
+
+# assume operator is running, and deploy an example node
+deploy:
+    kubectl delete penumbranode phlebas -n penumbra --wait --cascade=foreground || true
+    sleep 10
+    kubectl apply -f files/crd-example.yaml
+
+# Nuke everything
+nuke:
+    kubectl -n penumbra get penumbranodes -o name | xargs -r kubectl -n penumbra delete --cascade=foreground
+    kubectl -n penumbra delete sts,pvc -l app.kubernetes.io/managed-by=penumbra-operator --cascade=foreground
+    kubectl get crd -o name | rg penumbranodes.penumbra.zone | xargs -r kubectl delete --cascade=foreground
+
+# build the containerfile for the operator
+container:
+  podman build -t harbor.ruin.dev/library/penumbra-operator .

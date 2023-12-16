@@ -1,0 +1,34 @@
+#!/bin/bash
+# Entrypoint script for initContainer for Penumbra node.
+set -euo pipefail
+
+
+# we must write into a subdir of the volumeMount, because the "--network-dir" arg
+# to "pd network join" must point to a non-existent directory, and the volumeMount
+# will always exist.
+penumbra_network_dir="/home/penumbra/.penumbra/network_data"
+
+if ! test -d "$penumbra_network_dir" ; then
+    echo "No pre-existing network data, pulling fresh info"
+    # shellcheck disable=SC2086
+    pd network --network-dir "$penumbra_network_dir" join \
+        --tendermint-p2p-bind 0.0.0.0:26656 \
+        --tendermint-rpc-bind 0.0.0.0:26657 \
+        "$PENUMBRA_BOOTSTRAP_URL"
+
+    if [[ -n "${PENUMBRA_CUSTOM_ARCHIVE_URL:-}" ]] ; then
+        dest_archive="${penumbra_network_dir}/$(basename "$PENUMBRA_CUSTOM_ARCHIVE_URL")"
+        >&2 echo "Downloading archive from $PENUMBRA_CUSTOM_ARCHIVE_URL ..."
+        while true; do sleep 300; ls -sh "$dest_archive"; done &
+        curl -# -sSfL -o "$dest_archive" "$PENUMBRA_CUSTOM_ARCHIVE_URL"
+        >&2 echo "Extracting archive..."
+        tar -xzf "$dest_archive" -C "${penumbra_network_dir}/node0/"
+        >&2 echo "Done, archive extracted"
+    fi
+fi
+
+# set ownership for pd user
+chown -R 1000:1000 /home/penumbra/.penumbra/network_data
+
+# set ownership for cometbft configs to match cometbft container "tmuser" uid/gid
+chown -R 100:1000 /home/penumbra/.penumbra/network_data/node0/cometbft
