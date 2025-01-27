@@ -20,6 +20,11 @@ doc:
 docs:
     cargo watch -w src -c -s "cargo doc && python3 -m http.server --directory target/doc"
 
+# lint all project files
+lint:
+  @just check
+  nix flake check --all-systems
+
 # assume operator is running, and deploy an example node
 deploy:
     kubectl delete penumbranode phlebas -n penumbra --wait --cascade=foreground || true
