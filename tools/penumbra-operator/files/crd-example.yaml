@@ -29,3 +29,4 @@ spec:
   archive_url: "https://artifacts.plinfra.net/penumbra-testnet-phobos-2/penumbra-node-archive-height-1507616.tar.gz"
   bootstrap_url: "https://rpc.testnet-preview.plinfra.net"
   network_name: testnet-preview
+  enable_indexing: true

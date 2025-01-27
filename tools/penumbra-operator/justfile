@@ -1,3 +1,7 @@
+# rerun the penumbra-operator against the present k8s context
+dev:
+  cargo watch -c -x run
+
 # run the penumbra-operator against the present k8s context
 run:
   cargo run
