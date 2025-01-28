@@ -1,0 +1,64 @@
+#!/bin/bash
+# Init script to generate a Penumbra network configuration.
+#
+# There are several required env vars, which are assumed to be set
+# by the controller context.
+set -euo pipefail
+
+find /opt/penumbra
+find "${PD_NETWORK_VAL_CONFIGS_MOUNT_POINT:?}"
+
+# we must write into a subdir of the volumeMount, because the "--network-dir" arg
+# to "pd network join" must point to a non-existent directory, and the volumeMount
+# will always exist.
+penumbra_network_dir="${PD_NETWORK_VAL_CONFIGS_MOUNT_POINT:?}/network_data"
+if test -d "$penumbra_network_dir" ; then
+    >&2 echo "Found pre-existing network data for chain-id '${PENUMBRA_NETWORK_CHAIN_ID:?}', leaving in-place..."
+    exit 0
+fi
+
+# Only set the peer address template flag if applicable.
+peer_address_template_flag=""
+if [[ "${PENUMBRA_NETWORK_NUM_VALIDATORS:?}" -gt 1 ]] ; then
+  peer_address_template_flag="--peer-address-template ${PENUMBRA_NETWORK_PEER_ADDRESS_TEMPLATE:-}"
+fi
+
+
+# generate network info
+# shellcheck disable=SC2086
+pd network --network-dir "$penumbra_network_dir" generate \
+  --preserve-chain-id \
+  --chain-id "${PENUMBRA_NETWORK_CHAIN_ID:?}" \
+  --epoch-duration "${PENUMBRA_NETWORK_EPOCH_DURATION:?}" \
+  --proposal-voting-blocks "${PENUMBRA_NETWORK_PROPOSAL_VOTING_BLOCKS:?}" \
+  --validators-input-file "${PENUMBRA_NETWORK_VALIDATORS_INPUT_FILEPATH:?}" \
+  $peer_address_template_flag
+
+find /opt/penumbra
+find "${PD_NETWORK_VAL_CONFIGS_MOUNT_POINT:?}"
+
+# copy validator configs to volume mounts
+for i in $(seq 0 "$((PENUMBRA_NETWORK_NUM_VALIDATORS - 1))") ; do
+
+  val_name="$(printf "%s-val-%d" "${PENUMBRA_NETWORK_CHAIN_ID:?}" "$i")"
+  >&2 printf 'Configuring validator %d/%d...\n' "$((i + 1))" "${PENUMBRA_NETWORK_NUM_VALIDATORS:?}"
+
+
+  dest_dir="${PD_NETWORK_VAL_CONFIGS_MOUNT_POINT:?}/${val_name}/network_data"
+  mkdir -p "$dest_dir"
+  # rename subdir to "node0" so we don't have to look up val ordinal when specifying homedir.
+  mv -v "${penumbra_network_dir}/node${i}" "${dest_dir}/node0"
+
+  # set ownership for pd user
+  chown 1000:1000 "${dest_dir}/node0"
+  chown -R 1000:1000 "${dest_dir}/node0/pd"
+
+  # set ownership for cometbft configs to match cometbft container "tmuser" uid/gid
+  chown -R 100:1000 "${dest_dir}/node0/cometbft"
+
+done
+
+find "${PD_NETWORK_VAL_CONFIGS_MOUNT_POINT:?}"
+
+>&2 echo "Network config generated, exiting"
+exit 0

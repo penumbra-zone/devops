@@ -1,14 +1,7 @@
+//! Primary entrypoint for the controller runtime.
 use std::io::IsTerminal as _;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{prelude::*, EnvFilter};
-// Declare a StatefulSet for Penumbra node.
-
-// Still TK:
-//
-// * reconcile statefulset
-// * trigger statefulset from CRD creation
-// * trigger reconcile from editing CRD
-//
 
 /// Initialize the [tracing] library via [tracing_subscriber].
 fn configure_tracing() -> anyhow::Result<()> {

@@ -1,33 +1,28 @@
 //! Kubernetes controller logic for managing Penumbra CRDs.
 
-use apiexts::CustomResourceDefinition;
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1 as apiexts;
-use kube::Config;
-use kube::ResourceExt;
-// use futures::StreamExt;
 use futures_util::StreamExt;
 use kube::runtime::finalizer::{finalizer, Event as Finalizer};
+use kube::Config;
 
 use kube::runtime::{
     controller::{Action, Controller},
     watcher,
 };
-use kube::{
-    api::{Api, Patch, PatchParams},
-    runtime::wait::{await_condition, conditions},
-    Client, CustomResourceExt,
-};
+use kube::{api::Api, Client};
 
-use crate::crd::PenumbraNode;
+use crate::crd::{PenumbraNetwork, PenumbraNode};
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::{Error, Result};
 use crate::DEFAULT_NAMESPACE;
-use crate::OPERATOR_GROUP;
-use crate::OPERATOR_NAME;
 
-pub const PENUMBRA_FINALIZER: &str = "penumbranodes.penumbra.zone";
+pub const PENUMBRA_NODE_FINALIZER: &str = "penumbranodes.penumbra.zone";
+pub const PENUMBRA_NETWORK_FINALIZER: &str = "penumbranetworks.penumbra.zone";
+
+/// How many seconds to wait after an error to retry the reconcile action.
+const REQUEUE_DELAY_SECONDS: u64 = 60;
+// const REQUEUE_DELAY_SECONDS: u64 = 5;
 
 /// Ensures that the relevant CRDs for the operator are recognized
 /// by the cluster. Idempotent, so it's OK to run this command multiple times.
@@ -37,19 +32,8 @@ pub const PENUMBRA_FINALIZER: &str = "penumbranodes.penumbra.zone";
 /// while running inside the cluster.
 #[tracing::instrument(skip_all)]
 pub async fn install_crds(client: &Client) -> anyhow::Result<()> {
-    // Lifted from the kube.rs examples directory
-    let params = PatchParams::apply(OPERATOR_NAME).force();
-    let crds: Api<CustomResourceDefinition> = Api::all(client.clone());
-    let crd_fqdn = format!("penumbranodes.{}", OPERATOR_GROUP);
-    tracing::info!("creating crd: {}", crd_fqdn,);
-    crds.patch(&crd_fqdn, &params, &Patch::Apply(PenumbraNode::crd()))
-        .await?;
-
-    // Block until ready.
-    tracing::info!("waiting for the api-server to accept the CRD");
-    let establish = await_condition(crds, &crd_fqdn, conditions::is_crd_established());
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(10), establish).await?;
-    tracing::info!("done!");
+    PenumbraNode::install(client).await?;
+    PenumbraNetwork::install(client).await?;
     Ok(())
 }
 
@@ -62,11 +46,11 @@ struct Context {
 
 /// Ensures that CRDs are adequately represented in terms of cluster resources.
 #[tracing::instrument(skip_all)]
-async fn reconcile(node: Arc<PenumbraNode>, ctx: Arc<Context>) -> Result<Action> {
-    tracing::info!("reconciling PenumbraNode '{}'", node.name_any());
+async fn reconcile_penumbra_node(node: Arc<PenumbraNode>, ctx: Arc<Context>) -> Result<Action> {
+    tracing::debug!("reconciling {node}");
     let client = ctx.client.clone();
     let nodes: Api<PenumbraNode> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
-    finalizer(&nodes, PENUMBRA_FINALIZER, node, |event| async {
+    finalizer(&nodes, PENUMBRA_NODE_FINALIZER, node, |event| async {
         match event {
             Finalizer::Apply(node) => node.reconcile(&client.clone()).await,
             Finalizer::Cleanup(node) => node.cleanup(&client.clone()).await,
@@ -76,18 +60,46 @@ async fn reconcile(node: Arc<PenumbraNode>, ctx: Arc<Context>) -> Result<Action>
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
-/// Custom error handler for reconciliation loop. Logs error, requeues object.
+/// Ensures that CRDs are adequately represented in terms of cluster resources.
 #[tracing::instrument(skip_all)]
-fn error_policy(n: Arc<PenumbraNode>, e: &Error, _ctx: Arc<Context>) -> Action {
-    tracing::warn!(
-        ?n,
-        ?e,
-        "encountered error while reconciling node, requeuing"
-    );
-    Action::requeue(Duration::from_secs(60))
+async fn reconcile_penumbra_network(
+    network: Arc<PenumbraNetwork>,
+    ctx: Arc<Context>,
+) -> Result<Action> {
+    tracing::debug!("reconciling {network}'");
+    let client = ctx.client.clone();
+    let networks: Api<PenumbraNetwork> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+    finalizer(
+        &networks,
+        PENUMBRA_NETWORK_FINALIZER,
+        network,
+        |event| async {
+            match event {
+                Finalizer::Apply(n) => n.reconcile(&client.clone()).await,
+                Finalizer::Cleanup(n) => n.cleanup(&client.clone()).await,
+            }
+        },
+    )
+    .await
+    .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
-/// Main controller loop.
+/// Custom error handler for reconciliation loop. Logs error, requeues object.
+fn error_policy_penumbra_node(n: Arc<PenumbraNode>, e: &Error, _ctx: Arc<Context>) -> Action {
+    tracing::error!(?n, ?e, "encountered error while reconciling, requeuing");
+    // tracing::error!("encountered error while reconciling {}, requeuing", n);
+    Action::requeue(Duration::from_secs(REQUEUE_DELAY_SECONDS))
+}
+
+/// Custom error handler for reconciliation loop. Logs error, requeues object.
+fn error_policy_penumbra_network(n: Arc<PenumbraNetwork>, e: &Error, _ctx: Arc<Context>) -> Action {
+    tracing::error!(?n, ?e, "encountered error while reconciling, requeuing");
+    // tracing::error!("encountered error while reconciling {}, requeuing", n);
+    Action::requeue(Duration::from_secs(REQUEUE_DELAY_SECONDS))
+}
+
+/// Main controller loop. Manages two separate [Controller]s,
+/// one for [PenumbraNode] and another for [PenumbraNetwork].
 #[tracing::instrument(skip_all)]
 pub async fn run() -> anyhow::Result<()> {
     tracing::debug!("entering run loop for controller");
@@ -99,11 +111,41 @@ pub async fn run() -> anyhow::Result<()> {
     // Useful for running via cli interactively.
     install_crds(&client.clone()).await?;
 
-    // Set up watchers.
+    // Create APIs for both resources
+    let penumbra_nodes = Api::<PenumbraNode>::all(client.clone());
+    let penumbra_networks = Api::<PenumbraNetwork>::all(client.clone());
+
+    let context = Arc::new(Context {
+        client: client.clone(),
+    });
+
+    // Create controllers for both resources
+    let penumbra_node_controller = Controller::new(penumbra_nodes, watcher::Config::default())
+        .run(
+            reconcile_penumbra_node,
+            error_policy_penumbra_node,
+            context.clone(),
+        )
+        .filter_map(|x| async move { Result::ok(x) })
+        .for_each(|_| futures::future::ready(()));
+
+    let penumbra_network_controller =
+        Controller::new(penumbra_networks, watcher::Config::default())
+            .run(
+                reconcile_penumbra_network,
+                error_policy_penumbra_network,
+                context.clone(),
+            )
+            .filter_map(|x| async move { Result::ok(x) })
+            .for_each(|_| futures::future::ready(()));
+
+    // Run both controllers concurrently
+    futures::join!(penumbra_node_controller, penumbra_network_controller);
+
+    // Set up watchers for PenumbraNode.
     let nodes = Api::<PenumbraNode>::all(client.clone());
-    let context = Arc::new(Context { client });
     Controller::new(nodes, watcher::Config::default())
-        .run(reconcile, error_policy, context)
+        .run(reconcile_penumbra_node, error_policy_penumbra_node, context)
         .for_each(|res| async move {
             match res {
                 Ok(o) => tracing::info!("reconciled {:?}", o),

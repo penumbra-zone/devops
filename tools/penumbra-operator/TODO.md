@@ -48,6 +48,14 @@ Then we can auto-default everything else. That means resources to deploy would b
 - [x] add containerfile
 - [ ] shared pvc for archive urls
 - [ ] add support for creating networks
+  - [x] create pvcs
+  - [x] create configmaps
+  - [x] mount pvcs
+  - [x] mount configmaps
+  - [x] generate that network
+  - [x] copy that stuff over
+  - [ ] implement cleanup/retention
+  - [ ] create vals (via PenumbraNode?)
 - [ ] add subcommands:
   - [ ] impl `deploy` which creates a penumbranode
 - [ ] cli interface:

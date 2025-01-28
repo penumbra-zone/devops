@@ -8,6 +8,12 @@ pub enum Error {
     #[error("failed to get lock on jawn")]
     ClientAccess,
 
+    #[error("network genesis creation failed")]
+    GenesisFailure,
+
+    #[error("failed to install CRD to cluster")]
+    InstallFailure,
+
     #[error("k8s api returned error: {0}")]
     // Type madness is straight out of `controller-rs` example, I swear.
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),

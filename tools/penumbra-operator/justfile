@@ -9,6 +9,7 @@ run:
 # run cargo check
 check:
   cargo check --all-targets --all-features
+  cargo clippy --fix
 
 # build all targets
 build:
@@ -26,14 +27,17 @@ docs:
 
 # lint all project files
 lint:
+  @just shellcheck
   @just check
   nix flake check --all-systems
 
+# poor man's integration testing
+integration:
+    ./tests/integration.sh
+
 # assume operator is running, and deploy an example node
 deploy:
-    kubectl delete penumbranode phlebas -n penumbra --wait --cascade=foreground || true
-    sleep 10
-    kubectl apply -f files/crd-example.yaml
+  @just integration
 
 # Nuke everything
 nuke:
@@ -44,3 +48,12 @@ nuke:
 # build the containerfile for the operator
 container:
   podman build -t harbor.ruin.dev/library/penumbra-operator .
+
+# run shellcheck on scripts
+shellcheck:
+  @just print-shellscripts \
+        | xargs -r shellcheck -x
+
+# display paths for shell scripts in project
+print-shellscripts:
+    fd -t f -X file --mime  | perl -F: -lanE '$F[1] =~ /text\/x-shellscript/ and say $F[0]'

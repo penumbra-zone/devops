@@ -19,6 +19,7 @@
             doctl
             fd
             file
+            fzf
             glibcLocales
             go
             gum
@@ -33,6 +34,7 @@
             shellcheck
             xz
             yamllint
+            yq
           ];
         };
         # Don't automatically source the env, which requires an `age` privkey

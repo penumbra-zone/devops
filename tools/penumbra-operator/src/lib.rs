@@ -28,4 +28,3 @@ pub const PENUMBRA_FINALIZER: &str = "latest";
 pub mod controller;
 pub mod crd;
 pub mod error;
-pub mod resources;
