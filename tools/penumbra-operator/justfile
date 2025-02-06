@@ -6,6 +6,10 @@ dev:
 run:
   cargo run
 
+# restart all running statefulsets managed by the operator
+bounce:
+  kubectl -n penumbra get sts -o name | xargs -r kubectl -n penumbra rollout restart
+
 # run cargo check
 check:
   cargo check --all-targets --all-features
@@ -31,10 +35,6 @@ lint:
   @just check
   nix flake check --all-systems
 
-# poor man's integration testing
-integration:
-    ./tests/integration.sh
-
 # assume operator is running, and deploy an example node
 deploy:
   @just integration
@@ -57,3 +57,12 @@ shellcheck:
 # display paths for shell scripts in project
 print-shellscripts:
     fd -t f -X file --mime  | perl -F: -lanE '$F[1] =~ /text\/x-shellscript/ and say $F[0]'
+
+# run tests, both unit and integration
+test:
+  cargo nextest run --nocapture
+  cargo nextest run --features network-integration
+
+# run integration tests; PERFORMS DESTRUCTIVE ACTIONS AGAINST REAL CLUSTER
+integration:
+  RUST_LOG=debug cargo nextest run --features network-integration --nocapture

@@ -8,7 +8,6 @@ apiVersion: penumbra.zone/v1alpha1
 kind: PenumbraNetwork
 metadata:
   name: penumbra-devnet-55
-  namespace: penumbra
 spec:
   chain_id: penumbra-devnet-55
   num_validators: 2
@@ -17,7 +16,6 @@ apiVersion: penumbra.zone/v1alpha1
 kind: PenumbraNetwork
 metadata:
   name: penumbra-devnet-56
-  namespace: penumbra
 spec:
   chain_id: penumbra-devnet-56
   num_validators: 1
