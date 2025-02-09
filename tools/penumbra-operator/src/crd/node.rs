@@ -21,9 +21,9 @@ use serde::{Deserialize, Serialize};
 use k8s_openapi::api::apps::v1::{StatefulSet, StatefulSetSpec};
 use k8s_openapi::api::core::v1::{
     ConfigMap, ConfigMapVolumeSource, Container, ContainerPort, EnvVar, KeyToPath,
-    PersistentVolumeClaim, PersistentVolumeClaimSpec, PodSpec, PodTemplateSpec, Probe,
-    SecurityContext, Service, ServicePort, ServiceSpec, TCPSocketAction, Volume, VolumeMount,
-    VolumeResourceRequirements,
+    PersistentVolumeClaim, PersistentVolumeClaimSpec, PersistentVolumeClaimVolumeSource, Pod,
+    PodSpec, PodTemplateSpec, Probe, SecurityContext, Service, ServicePort, ServiceSpec,
+    TCPSocketAction, Volume, VolumeMount, VolumeResourceRequirements,
 };
 
 use rand::Rng;
@@ -37,7 +37,6 @@ use kube::{
 };
 use std::collections::BTreeMap;
 
-use crate::crd::resources;
 use crate::crd::resources::PD_NODE_STATE_PVC_NAME;
 use crate::error::Result;
 use crate::DEFAULT_NAMESPACE;
@@ -48,10 +47,9 @@ use crate::PENUMBRA_IMAGE_TAG;
 const DEFAULT_BOOTSTRAP_URL: &str = "https://rpc.testnet-preview.plinfra.net";
 
 /// How many seconds to wait after an error to retry the reconcile action.
-const REQUEUE_DELAY_SECONDS: u64 = 60;
+const REQUEUE_DELAY_SECONDS: u64 = 30;
 
 pub(crate) const PD_INIT_SCRIPT_NAME: &str = "pd-init";
-pub(crate) const PD_INIT_VOLUME_MOUNT_NAME: &str = "penumbra-init";
 pub(crate) const CMT_SCHEMA_CONFIG_MAP_NAME: &str = "penumbra-cometbft-postgres-schema";
 
 /// K8s CRD specification for a [`PenumbraNode`] resource.
@@ -103,6 +101,14 @@ pub struct PenumbraNodeSpec {
     /// its services are up, but they need to talk to each other through
     /// services in order to work.
     pub publish_not_ready_addresses: Option<bool>,
+
+    /// Optional hard-coded seed settings for CometBFT.
+    /// Should be formatted as full CometBFT URLs:
+    pub seeds: Option<String>,
+
+    /// Specify the type of node. Affects which labels are added,
+    /// to help with selection. Defaults to 'FullNode'.
+    pub node_type: Option<NodeType>,
 }
 
 impl Default for PenumbraNodeSpec {
@@ -118,6 +124,8 @@ impl Default for PenumbraNodeSpec {
             node_state_pvc_name: None,
             release_name: None,
             publish_not_ready_addresses: Some(false),
+            seeds: None,
+            node_type: Some(NodeType::FullNode),
         }
     }
 }
@@ -125,6 +133,23 @@ impl Default for PenumbraNodeSpec {
 impl fmt::Display for PenumbraNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "PenumbraNode<{}>", self.spec.moniker)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, JsonSchema)]
+pub enum NodeType {
+    FullNode,
+    Validator,
+    GenesisValidator,
+}
+
+impl fmt::Display for NodeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NodeType::FullNode => write!(f, "full-node"),
+            NodeType::Validator => write!(f, "validator"),
+            NodeType::GenesisValidator => write!(f, "genesis-validator"),
+        }
     }
 }
 
@@ -159,7 +184,7 @@ impl PenumbraNode {
     pub fn oref(&self) -> OwnerReference {
         OwnerReference {
             // TODO: figure out how to access the kube-derive fields for api_version and kind.
-            api_version: "v1alpha1".to_owned(),
+            api_version: "v1alpha2".to_owned(),
             kind: "PenumbraNode".to_owned(),
             name: self
                 .metadata
@@ -172,7 +197,7 @@ impl PenumbraNode {
                 .clone()
                 .unwrap_or_else(|| panic!("PenumbraNode<{}> lacks a uid", self.release_name())),
             controller: Some(true),
-            block_owner_deletion: Some(true),
+            ..Default::default()
         }
     }
 
@@ -187,8 +212,40 @@ impl PenumbraNode {
             ),
             ("app.kubernetes.io/name".to_owned(), self.release_name()),
             ("app.kubernetes.io/part-of".to_owned(), self.release_name()),
+            (
+                format!("{}/node-type", crate::OPERATOR_NAME),
+                self.spec
+                    .node_type
+                    .clone()
+                    .unwrap_or(NodeType::FullNode)
+                    .to_string(),
+            ),
         ]));
         l
+    }
+
+    pub fn pod(&self) -> Pod {
+        let mut containers = vec![self.pd_container(), self.cometbft_container()];
+        // Opt in to ABCI event indexing
+        if self.spec.enable_indexing.unwrap_or_default() {
+            containers.push(self.postgres_container());
+        }
+        Pod {
+            metadata: ObjectMeta {
+                name: Some(self.release_name()),
+                labels: Some(self.labels()),
+                owner_references: Some(vec![self.oref()]),
+                ..Default::default()
+            },
+            spec: Some(PodSpec {
+                init_containers: Some(vec![self.pd_init_container()]),
+                containers,
+                volumes: Some(self.volumes()),
+                restart_policy: Some("Never".to_owned()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
     }
 
     /// Emit a [StatefulSet] that matches the configured CRD.
@@ -197,13 +254,6 @@ impl PenumbraNode {
     /// e.g. PodSpec, Pod, Container, VolumeClaimTemplate, etc.,
     /// and bottles them up into a single StatefulSet.
     pub fn stateful_set(&self) -> StatefulSet {
-        let init_container = self.pd_init_container();
-
-        let mut containers = vec![self.pd_container(), resources::cometbft_container()];
-        // Opt in to ABCI event indexing
-        if self.spec.enable_indexing.unwrap_or_default() {
-            containers.push(resources::postgres_container());
-        }
         StatefulSet {
             metadata: ObjectMeta {
                 name: Some(self.release_name()),
@@ -216,17 +266,8 @@ impl PenumbraNode {
             spec: Some(StatefulSetSpec {
                 replicas: Some(1),
                 template: PodTemplateSpec {
-                    metadata: Some(ObjectMeta {
-                        name: Some(self.release_name()),
-                        labels: Some(self.labels()),
-                        ..Default::default()
-                    }),
-                    spec: Some(PodSpec {
-                        init_containers: Some(vec![init_container]),
-                        containers,
-                        volumes: Some(self.volumes()),
-                        ..Default::default()
-                    }),
+                    metadata: Some(self.pod().clone().metadata),
+                    spec: self.pod().clone().spec,
                 },
                 volume_claim_templates: Some(self.pvcs()),
                 selector: LabelSelector {
@@ -271,7 +312,8 @@ impl PenumbraNode {
                 ..Default::default()
             })
             .collect();
-        let cmt_ports: Vec<ServicePort> = resources::cometbft_container()
+        let cmt_ports: Vec<ServicePort> = self
+            .cometbft_container()
             .ports
             .expect("failed to find ports for cometbft container")
             .into_iter()
@@ -284,7 +326,8 @@ impl PenumbraNode {
 
         let mut db_ports: Vec<ServicePort> = Vec::new();
         if self.spec.enable_indexing.unwrap_or_default() {
-            db_ports = resources::postgres_container()
+            db_ports = self
+                .postgres_container()
                 .ports
                 .expect("failed to find ports for postgres container")
                 .into_iter()
@@ -330,7 +373,7 @@ impl PenumbraNode {
     /// Define additional [Volume]s for the pod, beyond the [PersistentVolumeClaim]s.
     pub fn volumes(&self) -> Vec<Volume> {
         let mut vols = vec![Volume {
-            name: PD_INIT_VOLUME_MOUNT_NAME.to_owned(),
+            name: PD_INIT_SCRIPT_NAME.to_owned(),
             config_map: Some(ConfigMapVolumeSource {
                 name: self
                     .pd_init_script_configmap()
@@ -363,6 +406,24 @@ impl PenumbraNode {
                 ..Default::default()
             });
         }
+
+        let pvc_volumes = self.pvcs().into_iter().map(|pvc| Volume {
+            name: pvc
+                .metadata
+                .name
+                .clone()
+                .expect("pvc is missing name field"),
+            persistent_volume_claim: Some(PersistentVolumeClaimVolumeSource {
+                claim_name: pvc.metadata.name.expect("pvc is missing name field"),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        vols.extend(pvc_volumes);
+        // Also append the PVCs, because no intermediate cnotroller like Deployment or StatefulSet
+        // will do so automatically.
+        // TODO
         vols
     }
 
@@ -371,7 +432,14 @@ impl PenumbraNode {
         let mut claims = vec![PersistentVolumeClaim {
             // PVC for storing node state, for all applications.
             metadata: ObjectMeta {
-                name: Some(crate::crd::resources::PD_NODE_STATE_PVC_NAME.to_owned()),
+                // name: Some(crate::crd::resources::PD_NODE_STATE_PVC_NAME.to_owned()),
+                // We can't assume a higher-level resource manager like StatefulSet will
+                // refine the PVC name field to be specific; we must make it explicit.
+                name: Some(format!(
+                    "{}-{}",
+                    self.release_name(),
+                    crate::crd::resources::PD_NODE_STATE_PVC_NAME.to_owned()
+                )),
                 labels: Some(self.labels()),
                 owner_references: Some(vec![self.oref()]),
                 ..Default::default()
@@ -389,10 +457,15 @@ impl PenumbraNode {
             }),
             ..Default::default()
         }];
+        // TODO: ditch separate PVC for db, just submount into primary setup
         if self.spec.enable_indexing.unwrap_or_default() {
             claims.push(PersistentVolumeClaim {
                 metadata: ObjectMeta {
-                    name: Some(crate::crd::resources::DB_PVC_NAME.to_owned()),
+                    name: Some(format!(
+                        "{}-{}",
+                        self.release_name(),
+                        crate::crd::resources::DB_PVC_NAME.to_owned()
+                    )),
                     labels: Some(self.labels()),
                     owner_references: Some(vec![self.oref()]),
                     ..Default::default()
@@ -426,6 +499,15 @@ impl PenumbraNode {
                 // TODO: use the pd built-in env vars
                 // name: "PENUMBRA_PD_JOIN_URL".to_string(),
                 value: Some(u.to_string()),
+                value_from: None,
+            });
+        }
+
+        // Set CometBFT peers, if necessary.
+        if let Some(s) = &self.spec.seeds.clone() {
+            env.push(EnvVar {
+                name: "PENUMBRA_COMETBFT_SEEDS".to_owned(),
+                value: Some(s.to_string()),
                 value_from: None,
             });
         }
@@ -513,7 +595,12 @@ impl PenumbraNode {
                 ..Default::default()
             }),
             volume_mounts: Some(vec![VolumeMount {
-                name: PD_NODE_STATE_PVC_NAME.to_owned(),
+                // name: PD_NODE_STATE_PVC_NAME.to_owned(),
+                name: format!(
+                    "{}-{}",
+                    self.release_name(),
+                    PD_NODE_STATE_PVC_NAME.to_owned()
+                ),
                 mount_path: "/home/penumbra/.penumbra".to_owned(),
                 ..Default::default()
             }]),
@@ -541,16 +628,142 @@ impl PenumbraNode {
             }),
             volume_mounts: Some(vec![
                 VolumeMount {
-                    name: PD_INIT_VOLUME_MOUNT_NAME.to_owned(),
+                    name: PD_INIT_SCRIPT_NAME.to_owned(),
                     mount_path: "/opt/penumbra".to_owned(),
                     ..Default::default()
                 },
                 VolumeMount {
-                    name: PD_NODE_STATE_PVC_NAME.to_owned(),
+                    name: format!(
+                        "{}-{}",
+                        self.release_name(),
+                        PD_NODE_STATE_PVC_NAME.to_owned()
+                    ),
+                    // name: PD_NODE_STATE_PVC_NAME.to_owned(),
                     mount_path: "/home/penumbra/.penumbra/".to_owned(),
                     ..Default::default()
                 },
             ]),
+            ..Default::default()
+        }
+    }
+    /// Create [Container] spec for `cometbft`, the CometBFT consensus sidecar for Penumbra.
+    pub fn cometbft_container(&self) -> Container {
+        Container {
+            name: "cometbft".to_owned(),
+            image: Some(format!(
+                "{}:{}",
+                crate::COMETBFT_IMAGE_REPO,
+                crate::COMETBFT_IMAGE_TAG
+            )),
+            command: Some(
+                vec!["cometbft", "start", "--proxy_app=tcp://127.0.0.1:26658"]
+                    .into_iter()
+                    .map(|x| x.to_owned())
+                    .collect(),
+            ),
+            ports: Some(vec![
+                ContainerPort {
+                    name: Some("cmt-p2p".to_owned()),
+                    container_port: 26656,
+                    ..Default::default()
+                },
+                ContainerPort {
+                    name: Some("cmt-rpc".to_owned()),
+                    container_port: 26657,
+                    ..Default::default()
+                },
+                ContainerPort {
+                    name: Some("cmt-metrics".to_owned()),
+                    container_port: 26660,
+                    ..Default::default()
+                },
+            ]),
+            readiness_probe: Some(Probe {
+                tcp_socket: Some(TCPSocketAction {
+                    port: IntOrString::String("cmt-rpc".to_owned()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            security_context: Some(SecurityContext {
+                run_as_user: Some(100),
+                ..Default::default()
+            }),
+            volume_mounts: Some(vec![VolumeMount {
+                name: format!(
+                    "{}-{}",
+                    self.release_name(),
+                    PD_NODE_STATE_PVC_NAME.to_owned()
+                ),
+                mount_path: "/cometbft".to_owned(),
+                sub_path: Some("network_data/node0/cometbft".to_owned()),
+                ..Default::default()
+            }]),
+
+            ..Default::default()
+        }
+    }
+
+    /// Create [Container] spec for `postgres`, for optional ABCI event indexing
+    /// via CometBFT.
+    pub fn postgres_container(&self) -> Container {
+        let container_name = "postgres".to_owned();
+        Container {
+            name: container_name.clone(),
+            image: Some(format!(
+                "{}:{}",
+                crate::POSTGRES_IMAGE_REPO,
+                crate::POSTGRES_IMAGE_TAG
+            )),
+            // TODO support ssl args
+            ports: Some(vec![ContainerPort {
+                name: Some(container_name),
+                container_port: 5432,
+                ..Default::default()
+            }]),
+            // TODO support auth customization
+            env: Some(vec![
+                EnvVar {
+                    name: "POSTGRES_PASSWORD".to_string(),
+                    value: Some("penumbra".to_string()),
+                    ..Default::default()
+                },
+                EnvVar {
+                    name: "POSTGRES_DB".to_string(),
+                    value: Some("penumbra".to_string()),
+                    ..Default::default()
+                },
+                EnvVar {
+                    name: "POSTGRES_USER".to_string(),
+                    value: Some("penumbra".to_string()),
+                    ..Default::default()
+                },
+            ]),
+            readiness_probe: Some(Probe {
+                tcp_socket: Some(TCPSocketAction {
+                    port: IntOrString::Int(5432),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            volume_mounts: Some(vec![
+                VolumeMount {
+                    name: "postgres-schema".to_owned(),
+                    mount_path: "/docker-entrypoint-initdb.d".to_owned(),
+                    read_only: Some(true),
+                    ..Default::default()
+                },
+                VolumeMount {
+                    name: format!(
+                        "{}-{}",
+                        self.release_name(),
+                        crate::crd::resources::DB_PVC_NAME.to_owned()
+                    ),
+                    mount_path: "/var/lib/postgresql".to_owned(),
+                    ..Default::default()
+                },
+            ]),
+
             ..Default::default()
         }
     }
@@ -585,6 +798,24 @@ impl PenumbraNode {
     pub async fn cleanup(&self, client: &Client) -> Result<Action> {
         tracing::warn!("cleanup functionality only partially implmented");
 
+        tracing::info!("deleting Pod");
+        let pod_api: Api<Pod> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        match pod_api.get(self.release_name().as_str()).await {
+            Ok(_sts) => {
+                let delete_params = DeleteParams {
+                    propagation_policy: Some(PropagationPolicy::Foreground),
+                    ..Default::default()
+                };
+                pod_api
+                    .delete(self.release_name().as_str(), &delete_params)
+                    .await?;
+            }
+            Err(_e) => {
+                // Log a warning because this shouldn't happen.
+                tracing::warn!("statefulset not found, skipping deletion");
+            }
+        }
+
         tracing::info!("deleting Statefulset");
         let sts_api: Api<StatefulSet> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
         match sts_api.get(self.release_name().as_str()).await {
@@ -617,6 +848,35 @@ impl PenumbraNode {
         Ok(Action::await_change())
     }
 
+    async fn delete_and_wait(api: &Api<Pod>, name: &str) -> Result<()> {
+        // Start deletion with foreground propagation
+        let dp = DeleteParams {
+            propagation_policy: Some(PropagationPolicy::Foreground),
+            ..Default::default()
+        };
+
+        api.delete(name, &dp).await?;
+
+        // Simple poll loop with timeout
+        let timeout = Duration::from_secs(30);
+        let start = std::time::Instant::now();
+
+        while start.elapsed() < timeout {
+            match api.get(name).await {
+                Ok(_) => {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+                Err(kube::Error::Api(err)) if err.code == 404 => {
+                    return Ok(()); // Pod is gone
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        Err(crate::error::Error::Timeout)
+        // Err(crate::error::Error::KubeError("Pod deletion timeout"))
+    }
+
     /// Ensure that the CRD is adequately expressed in cluster resources.
     pub async fn reconcile(&self, client: &Client) -> Result<Action> {
         // We need a ConfigMap in order for the initContainer to run.
@@ -641,42 +901,71 @@ impl PenumbraNode {
             }
         }
 
-        // Generate a StatefulSet for the node.
-        let ss = self.stateful_set();
-        let ss_api: Api<StatefulSet> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
-        match ss_api.get(&self.release_name()).await {
-            Ok(_ss_old) => {
-                tracing::debug!("patching StatefulSet<{}>", self.release_name());
-                let patch = Patch::Merge(&ss);
-                let params = PatchParams::default();
-                match ss_api
+        // Create PVCs. Currently there are two, but the db should be folded in to the primary.
+        let pvcs = self.pvcs();
+        let pvc_api: Api<PersistentVolumeClaim> =
+            Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+
+        // TODO: support resizing after creation.
+        for pvc in pvcs {
+            let pvc_name = pvc.metadata.name.as_ref().expect("pvc has name");
+            match pvc_api.get(pvc_name).await {
+                Ok(_) => {
+                    let patch = Patch::Merge(&pvc);
+                    let params = PatchParams::default();
+                    pvc_api.patch(pvc_name, &params, &patch).await?;
+                }
+                Err(_e) => {
+                    tracing::info!("creating PVC<{}>", &pvc_name);
+                    pvc_api.create(&PostParams::default(), &pvc).await?;
+                }
+            }
+        }
+
+        // Generate a Pod for the node.
+        let pod = self.pod();
+        let pod_api: Api<Pod> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        match pod_api.get(&self.release_name()).await {
+            Ok(_pod_old) => {
+                tracing::debug!("patching Pod<{}>", self.release_name());
+                let patch = Patch::Apply(&pod);
+                let params = PatchParams::apply(crate::OPERATOR_NAME);
+                match pod_api
                     .patch(self.release_name().as_str(), &params, &patch)
                     .await
                 {
-                    Ok(_ss_new) => {}
-                    // If patching the StatefulSet failed, we likely tried to update a field that
-                    // isn't allowed. Let's recreate the StatefulSet, while keeping its pods
-                    // running, to correct.
+                    Ok(_pod_new) => {}
+                    // If patching the Pod failed, we likely tried to update a non-mutable field.
+                    // Instead, recreate the pod.
+                    // Err(e) => {
+                    Err(kube::Error::Api(err)) => {
+                        if err.code == 422 {
+                            // Unprocessable Entity
+                            tracing::warn!(
+                                "failed to patch Pod<{}>: {}, recreating it",
+                                self.release_name(),
+                                err,
+                            );
+                            Self::delete_and_wait(&pod_api, &self.release_name()).await?;
+                            pod_api.create(&PostParams::default(), &pod).await?;
+                        } else {
+                            tracing::warn!(
+                                "received error code '{}' on PATCH to Pod<{}>",
+                                err.code,
+                                self.release_name()
+                            );
+                            // return Err(crate::error::Error::KubeError(kube::Error::Api(err)));
+                        }
+                    }
                     Err(e) => {
-                        tracing::warn!(
-                            "failed to patch StatefulSet<{}>: {}, recreating it",
-                            self.release_name(),
-                            e,
-                        );
-                        // Delete StatefulSet but orphan the pods, so the running node is not
-                        // affected. Doing so allows us to update
-                        let dp = DeleteParams {
-                            propagation_policy: Some(PropagationPolicy::Orphan),
-                            ..DeleteParams::default()
-                        };
-                        ss_api.delete(&self.release_name(), &dp).await?;
-                        ss_api.create(&PostParams::default(), &ss).await?;
+                        tracing::error!("found unexpected error");
+                        return Err(crate::error::Error::KubeError(e));
                     }
                 }
             }
             Err(_) => {
-                tracing::info!("creating StatefulSet<{}>", self.release_name());
-                ss_api.create(&PostParams::default(), &ss).await?;
+                tracing::info!("creating Pod<{}>", self.release_name());
+                pod_api.create(&PostParams::default(), &pod).await?;
             }
         }
 

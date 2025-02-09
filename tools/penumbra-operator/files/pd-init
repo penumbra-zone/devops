@@ -47,6 +47,12 @@ if [[ -n "${PENUMBRA_BOOTSTRAP_URL:-}" ]] ; then
             sed -i -e "/^psql-conn/d ; s#^indexer.*#indexer = \"kv\"#" \
                 "${penumbra_network_dir}/node0/cometbft/config/config.toml"
         fi
+
+        if [[ -n "${PENUMBRA_COMETBFT_SEEDS:-}" ]] ; then
+            >&2 echo "INFO: Setting CometBFT peers '${PENUMBRA_COMETBFT_SEEDS}'"
+            sed -i -e "s#^seeds.*#seeds = \"$PENUMBRA_COMETBFT_SEEDS\"#" \
+                "${penumbra_network_dir}/node0/cometbft/config/config.toml"
+        fi
     fi
 
 else

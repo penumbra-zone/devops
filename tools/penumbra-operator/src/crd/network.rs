@@ -44,7 +44,7 @@ use crate::DEFAULT_NAMESPACE;
 use crate::PENUMBRA_IMAGE_REPO;
 use crate::PENUMBRA_IMAGE_TAG;
 
-use super::node::PD_INIT_VOLUME_MOUNT_NAME;
+use super::node::PD_INIT_SCRIPT_NAME;
 
 const PD_NETWORK_GENERATE_CONFIG_MAP_NAME: &str = "pd-network-generate";
 const PD_NETWORK_MOUNT_POINT: &str = "/opt/penumbra";
@@ -236,7 +236,7 @@ impl PenumbraNetwork {
     /// Define [Volume]s for the Job pod, mounting in scripts.
     pub fn volumes(&self) -> Vec<Volume> {
         let mut volumes: Vec<Volume> = vec![Volume {
-            name: crate::crd::node::PD_INIT_VOLUME_MOUNT_NAME.to_owned(),
+            name: crate::crd::node::PD_INIT_SCRIPT_NAME.to_owned(),
             config_map: Some(ConfigMapVolumeSource {
                 name: self
                     .pd_network_generate_script_configmap()
@@ -458,10 +458,10 @@ impl PenumbraNetwork {
 
     /// Generate the precise PVC name.
     fn val_pvc_name(&self, index: u64) -> String {
-        // This name must match exactly what's set in the StatefulSet, so it gets reused.
+        // This name must match exactly what's set in the PenumbraNode's Pod, so it gets reused.
         format!(
-            "{}-penumbra-node-{}-val-{}-0",
-            PD_NODE_STATE_PVC_NAME, self.spec.chain_id, index
+            "penumbra-node-{}-val-{}-{}",
+            self.spec.chain_id, index, PD_NODE_STATE_PVC_NAME
         )
     }
 
@@ -471,7 +471,7 @@ impl PenumbraNetwork {
         let mut volume_mounts = Vec::<VolumeMount>::new();
 
         volume_mounts.push(VolumeMount {
-            name: PD_INIT_VOLUME_MOUNT_NAME.to_owned(),
+            name: PD_INIT_SCRIPT_NAME.to_owned(),
             mount_path: PD_NETWORK_MOUNT_POINT.to_owned(),
             ..Default::default()
         });

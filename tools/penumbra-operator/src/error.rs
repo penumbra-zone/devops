@@ -14,6 +14,9 @@ pub enum Error {
     #[error("failed to install CRD to cluster")]
     InstallFailure,
 
+    #[error("failed to delete resource after timeout")]
+    Timeout,
+
     #[error("k8s api returned error: {0}")]
     // Type madness is straight out of `controller-rs` example, I swear.
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),

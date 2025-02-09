@@ -7,26 +7,23 @@ metadata:
 apiVersion: penumbra.zone/v1alpha1
 kind: PenumbraNode
 metadata:
-  name: phlebas
+  name: nachbar
   namespace: penumbra
 spec:
-  moniker: phlebas
-  # The "post-upgrade" archive reported wrong version, might not be correct.
-  # archive_url: "https://artifacts.plinfra.net/penumbra-testnet-phobos-2/penumbra-node-archive-height-1459800-post-upgrade.tar.gz"
-  archive_url: "https://artifacts.plinfra.net/penumbra-testnet-phobos-2/penumbra-node-archive-height-1507616.tar.gz"
-  bootstrap_url: "https://rpc.testnet-preview.plinfra.net"
+  moniker: nachbar
+  # use genesis-validator to bootstrap, assumes integration tests have been run
+  bootstrap_url: "http://penumbra-node-penumbra-devnet-55-val-0:26657"
   network_name: testnet-preview
+
 ---
 apiVersion: penumbra.zone/v1alpha1
 kind: PenumbraNode
 metadata:
-  name: norbert
+  name: nachbar-4
   namespace: penumbra
 spec:
-  moniker: norbert
-  # The "post-upgrade" archive reported wrong version, might not be correct.
-  # archive_url: "https://artifacts.plinfra.net/penumbra-testnet-phobos-2/penumbra-node-archive-height-1459800-post-upgrade.tar.gz"
-  archive_url: "https://artifacts.plinfra.net/penumbra-testnet-phobos-2/penumbra-node-archive-height-1507616.tar.gz"
-  bootstrap_url: "https://rpc.testnet-preview.plinfra.net"
+  moniker: nachbar-4
+  # use genesis-validator to bootstrap, assumes integration tests have been run
+  bootstrap_url: "http://penumbra-node-penumbra-devnet-55-val-0:26657"
   network_name: testnet-preview
-  enable_indexing: true
+  seeds: "tcp://3234b8ae5c98fc44f71e0f0498895f914f12140f@penumbra-node-penumbra-devnet-55-val-1:26656"
