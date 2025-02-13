@@ -40,7 +40,6 @@ use std::collections::BTreeMap;
 use crate::crd::node::{PenumbraNode, PenumbraNodeSpec};
 use crate::crd::resources::PD_NODE_STATE_PVC_NAME;
 use crate::error::Result;
-use crate::DEFAULT_NAMESPACE;
 use crate::PENUMBRA_IMAGE_REPO;
 use crate::PENUMBRA_IMAGE_TAG;
 
@@ -509,10 +508,15 @@ impl PenumbraNetwork {
     /// Ensure that the cluster resources representing the CRD are removed.
     #[tracing::instrument(skip_all)]
     pub async fn cleanup(&self, client: &Client) -> Result<Action> {
+        let namespace = self
+            .metadata
+            .namespace
+            .as_ref()
+            .expect("namespace is required");
         tracing::warn!("cleanup functionality only partially implmented");
 
         // Delete the Job that created genesis.
-        let job_api: Api<Job> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let job_api: Api<Job> = Api::namespaced(client.clone(), namespace);
         let job_name = self
             .generate_network_job()
             .metadata
@@ -535,7 +539,8 @@ impl PenumbraNetwork {
         }
 
         // Delete the validators.
-        let node_api: Api<PenumbraNode> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        // TODO: should this be a namespaced operation?
+        let node_api: Api<PenumbraNode> = Api::namespaced(client.clone(), namespace);
         for (i, _v) in self.validators().await.iter().enumerate() {
             let val_name = self.val_name(i as u64);
             match node_api.get(&val_name).await {
@@ -558,9 +563,14 @@ impl PenumbraNetwork {
 
     /// Ensure that the CRD is adequately expressed in cluster resources.
     pub async fn reconcile(&self, client: &Client) -> Result<Action> {
+        let namespace = self
+            .metadata
+            .namespace
+            .as_ref()
+            .expect("namespace is required");
         // We need a ConfigMap in order for the initContainer to run.
         let cm = self.pd_network_generate_script_configmap();
-        let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
 
         // Create ConfigMap for storing the `pd-network-generate` script.
         let cm_name = self
@@ -583,8 +593,7 @@ impl PenumbraNetwork {
 
         // Create PVCs: one for genesis, one for each of `num_validators`.
         let pvcs = self.pvcs();
-        let pvc_api: Api<PersistentVolumeClaim> =
-            Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let pvc_api: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), namespace);
 
         let expected_pvcs: usize = pvcs.len();
         let mut already_created = 0;
@@ -612,7 +621,7 @@ impl PenumbraNetwork {
         let already_initialized = expected_pvcs == already_created;
 
         // Create Job for `pd network generate`, copy outputs to relevant volumes.
-        let job_api: Api<Job> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let job_api: Api<Job> = Api::namespaced(client.clone(), namespace);
         let job = self.generate_network_job();
 
         let job_name = self
@@ -691,7 +700,7 @@ impl PenumbraNetwork {
         }
 
         // Create a PenumbraNode for each validator.
-        let node_api: Api<PenumbraNode> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let node_api: Api<PenumbraNode> = Api::namespaced(client.clone(), namespace);
         for (i, n) in self.validators().await.into_iter().enumerate() {
             let node_name = self.val_name(i as u64);
             match node_api.get(&node_name).await {

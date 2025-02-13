@@ -15,7 +15,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::error::{Error, Result};
-use crate::DEFAULT_NAMESPACE;
 
 pub const PENUMBRA_NODE_FINALIZER: &str = "penumbranodes.penumbra.zone";
 pub const PENUMBRA_NETWORK_FINALIZER: &str = "penumbranetworks.penumbra.zone";
@@ -47,9 +46,14 @@ struct Context {
 /// Ensures that CRDs are adequately represented in terms of cluster resources.
 #[tracing::instrument(skip_all)]
 async fn reconcile_penumbra_node(node: Arc<PenumbraNode>, ctx: Arc<Context>) -> Result<Action> {
+    let namespace = node
+        .metadata
+        .namespace
+        .as_ref()
+        .expect("namespace is required");
     tracing::debug!("reconciling {node}");
     let client = ctx.client.clone();
-    let nodes: Api<PenumbraNode> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+    let nodes: Api<PenumbraNode> = Api::namespaced(client.clone(), namespace);
     finalizer(&nodes, PENUMBRA_NODE_FINALIZER, node, |event| async {
         match event {
             Finalizer::Apply(node) => node.reconcile(&client.clone()).await,
@@ -66,9 +70,14 @@ async fn reconcile_penumbra_network(
     network: Arc<PenumbraNetwork>,
     ctx: Arc<Context>,
 ) -> Result<Action> {
+    let namespace = network
+        .metadata
+        .namespace
+        .as_ref()
+        .expect("namespace is required");
     tracing::debug!("reconciling {network}'");
     let client = ctx.client.clone();
-    let networks: Api<PenumbraNetwork> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+    let networks: Api<PenumbraNetwork> = Api::namespaced(client.clone(), namespace);
     finalizer(
         &networks,
         PENUMBRA_NETWORK_FINALIZER,
@@ -104,8 +113,7 @@ fn error_policy_penumbra_network(n: Arc<PenumbraNetwork>, e: &Error, _ctx: Arc<C
 pub async fn run() -> anyhow::Result<()> {
     tracing::debug!("entering run loop for controller");
     // Ensure the operator only manages resources in a specific namespace.
-    let mut k8s_config = Config::infer().await?;
-    k8s_config.default_namespace = DEFAULT_NAMESPACE.to_string();
+    let k8s_config = Config::infer().await?;
     let client = Client::try_from(k8s_config)?;
 
     // Useful for running via cli interactively.

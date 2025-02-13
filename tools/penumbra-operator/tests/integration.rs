@@ -19,8 +19,8 @@ use std::process::Command;
 /// namespace will be destroyed!
 //
 // TODO: figure out how to make this unique
-// const TEST_NAMESPACE: &str = "penumbra-operator-testing";
-const TEST_NAMESPACE: &str = "penumbra";
+const TEST_NAMESPACE: &str = "penumbra-operator-testing";
+// const TEST_NAMESPACE: &str = "penumbra";
 
 /// Remove all test resources. This is a VERY DESTRUCTIVE action.
 async fn cleanup() -> anyhow::Result<()> {
@@ -64,6 +64,9 @@ fn cleanup_resource(resource_type: &str, args: Vec<String>) -> anyhow::Result<()
     tracing::debug!("found {} {}", resources.len(), resource_type);
 
     // Remove any PenumbraNetworks..
+    if resources.is_empty() {
+        return Ok(());
+    }
     let status = Command::new("kubectl")
         .args(["-n", TEST_NAMESPACE, "delete", "--wait"])
         .args(&resources)

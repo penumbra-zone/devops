@@ -58,6 +58,10 @@ shellcheck:
 print-shellscripts:
     fd -t f -X file --mime  | perl -F: -lanE '$F[1] =~ /text\/x-shellscript/ and say $F[0]'
 
+# apply the k8s rbac rules, for integration tests
+rbac:
+  kubectl apply -f files/crd-rbac.yaml
+
 # run tests, both unit and integration
 test:
   cargo nextest run --nocapture

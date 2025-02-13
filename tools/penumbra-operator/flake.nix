@@ -28,6 +28,7 @@
             k9s
             kubectl
             kubernetes-helm
+            minikube
             perl
             rsync
             ruff

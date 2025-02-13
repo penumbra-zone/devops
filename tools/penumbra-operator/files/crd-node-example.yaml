@@ -2,28 +2,15 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: penumbra
+  name: penumbra-operator-testing
 ---
 apiVersion: penumbra.zone/v1alpha1
 kind: PenumbraNode
 metadata:
-  name: nachbar
-  namespace: penumbra
+  name: norbert
+  namespace: penumbra-operator-testing
 spec:
-  moniker: nachbar
+  moniker: norbert
   # use genesis-validator to bootstrap, assumes integration tests have been run
   bootstrap_url: "http://penumbra-node-penumbra-devnet-55-val-0:26657"
-  network_name: testnet-preview
-
----
-apiVersion: penumbra.zone/v1alpha1
-kind: PenumbraNode
-metadata:
-  name: nachbar-4
-  namespace: penumbra
-spec:
-  moniker: nachbar-4
-  # use genesis-validator to bootstrap, assumes integration tests have been run
-  bootstrap_url: "http://penumbra-node-penumbra-devnet-55-val-0:26657"
-  network_name: testnet-preview
-  seeds: "tcp://3234b8ae5c98fc44f71e0f0498895f914f12140f@penumbra-node-penumbra-devnet-55-val-1:26656"
+  # network_name: testnet-preview

@@ -9,9 +9,6 @@ pub const OPERATOR_NAME: &str = "penumbra-operator";
 /// The FQDN for namespacing the CRDs within the Kubernetes API.
 pub const OPERATOR_GROUP: &str = "penumbra.zone";
 
-/// The Kubernetes namespace in which resources will be monitored.
-pub const DEFAULT_NAMESPACE: &str = "penumbra";
-
 /// The container image repository for the Penumbra images.
 pub const PENUMBRA_IMAGE_REPO: &str = "ghcr.io/penumbra-zone/penumbra";
 /// The container tag used for Penumbra images.

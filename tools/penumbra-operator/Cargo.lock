@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "penumbra-operator"
-version = "0.2.3-alpha.0"
+version = "0.2.4-alpha.0"
 dependencies = [
  "anyhow",
  "escargot",

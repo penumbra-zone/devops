@@ -36,7 +36,6 @@ use std::collections::BTreeMap;
 
 use crate::crd::resources::PD_NODE_STATE_PVC_NAME;
 use crate::error::Result;
-use crate::DEFAULT_NAMESPACE;
 use crate::PENUMBRA_IMAGE_REPO;
 use crate::PENUMBRA_IMAGE_TAG;
 
@@ -752,10 +751,16 @@ impl PenumbraNode {
     /// Ensure that the cluster resources representing the CRD are removed.
     #[tracing::instrument(skip_all)]
     pub async fn cleanup(&self, client: &Client) -> Result<Action> {
+        let namespace = self
+            .metadata
+            .namespace
+            .as_ref()
+            .expect("namespace is required");
         tracing::warn!("cleanup functionality only partially implmented");
 
         tracing::info!("deleting Pod");
-        let pod_api: Api<Pod> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let pod_api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+
         match pod_api.get(self.release_name().as_str()).await {
             Ok(_sts) => {
                 let delete_params = DeleteParams {
@@ -772,7 +777,7 @@ impl PenumbraNode {
             }
         }
 
-        let svc_api: Api<Service> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let svc_api: Api<Service> = Api::namespaced(client.clone(), namespace);
         match svc_api.get(self.release_name().as_str()).await {
             Ok(_sts) => {
                 let delete_params = DeleteParams::default();
@@ -820,9 +825,15 @@ impl PenumbraNode {
 
     /// Ensure that the CRD is adequately expressed in cluster resources.
     pub async fn reconcile(&self, client: &Client) -> Result<Action> {
+        let namespace = self
+            .metadata
+            .namespace
+            .as_ref()
+            .expect("namespace is required");
+
         // We need a ConfigMap in order for the initContainer to run.
         let cm = self.pd_init_script_configmap();
-        let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
         // In lieu of a `get-or-create` method in the kube API, we'll match on a get() call,
         // and create if not found.
         let cm_name = cm
@@ -844,8 +855,7 @@ impl PenumbraNode {
 
         // Create PVCs. Currently there are two, but the db should be folded in to the primary.
         let pvcs = self.pvcs();
-        let pvc_api: Api<PersistentVolumeClaim> =
-            Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let pvc_api: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), namespace);
 
         // TODO: support resizing after creation.
         for pvc in pvcs {
@@ -865,7 +875,7 @@ impl PenumbraNode {
 
         // Generate a Pod for the node.
         let pod = self.pod();
-        let pod_api: Api<Pod> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let pod_api: Api<Pod> = Api::namespaced(client.clone(), namespace);
         match pod_api.get(&self.release_name()).await {
             Ok(_pod_old) => {
                 tracing::debug!("patching Pod<{}>", self.release_name());
@@ -912,7 +922,7 @@ impl PenumbraNode {
 
         // Generate a Service for the node.
         let svc = self.service();
-        let svc_api: Api<Service> = Api::namespaced(client.clone(), DEFAULT_NAMESPACE);
+        let svc_api: Api<Service> = Api::namespaced(client.clone(), namespace);
         match svc_api.get(&self.release_name()).await {
             Ok(_svc_old) => {
                 tracing::debug!("patching Service<{}>", self.release_name());
