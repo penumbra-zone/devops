@@ -70,3 +70,4 @@ test:
 # run integration tests; PERFORMS DESTRUCTIVE ACTIONS AGAINST REAL CLUSTER
 integration:
   RUST_LOG=debug cargo nextest run --features network-integration --nocapture
+  # RUST_LOG=debug cargo test --features network-integration -- --nocapture

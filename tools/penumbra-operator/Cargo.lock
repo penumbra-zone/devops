@@ -253,6 +253,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "035a5c3c87da8be7a0e5ebd6fbabcccd8651a59c27197096d1dfd74f312aaee5"
+dependencies = [
+ "ctor-proc-macro",
+]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "107adb396b2d8e7766e79151083ce1cc624b51dfd1c23e0429c50226bba693eb"
+
+[[package]]
 name = "darling"
 version = "0.20.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -931,9 +946,9 @@ dependencies = [
 
 [[package]]
 name = "lazy_static"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
@@ -1107,6 +1122,7 @@ name = "penumbra-operator"
 version = "0.2.4-alpha.0"
 dependencies = [
  "anyhow",
+ "ctor",
  "escargot",
  "futures",
  "futures-util",
@@ -1114,6 +1130,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "kube-derive 0.88.1",
+ "lazy_static",
  "rand",
  "rand_core",
  "schemars",
@@ -1121,6 +1138,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "serde_yaml",
+ "test-context",
  "thiserror 1.0.58",
  "tokio",
  "tracing",
@@ -1669,6 +1687,27 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
+
+[[package]]
+name = "test-context"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb69cce03e432993e2dc1f93f7899b952300fcb6dc44191a1b830b60b8c3c8aa"
+dependencies = [
+ "futures",
+ "test-context-macros",
+]
+
+[[package]]
+name = "test-context-macros"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97e0639209021e54dbe19cafabfc0b5574b078c37358945e6d473eabe39bb974"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
+]
 
 [[package]]
 name = "thiserror"
