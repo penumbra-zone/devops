@@ -3,11 +3,11 @@
 //!
 //! The creation of resources is strictly ordered:
 //!
-//!   1. Create PVCs based on `num_validators` (PVCs must match names in StatefulSet VCTs).
+//!   1. Create PVCs based on `num_validators`.
 //!   2. Create PVC for shared-config, to store network genesis.
 //!   3. Create Job for `pd network generate`, copy outputs to relevant volumes.
 //!      The job will not be recreated if the PVCs had already exists.
-//!   4. Create `StatefulSet` for each validator, using the [PenumbraNode] CRD.
+//!   4. Create `Pod` for each validator, using the [PenumbraNode] CRD.
 //!
 
 use apiexts::CustomResourceDefinition;

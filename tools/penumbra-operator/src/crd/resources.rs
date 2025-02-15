@@ -29,7 +29,6 @@ pub fn labels() -> BTreeMap<String, String> {
 }
 
 /// Generate map of annotations, for use in object metadata.
-/// For now, only applies to StatefulSet.
 pub fn annotations() -> BTreeMap<String, String> {
     BTreeMap::from([
         // Opt in to reload functionality via https://github.com/stakater/Reloader
