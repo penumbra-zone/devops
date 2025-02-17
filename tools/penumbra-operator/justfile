@@ -1,7 +1,5 @@
 # rerun the penumbra-operator against the present k8s context
 dev:
-  minikube start
-  just nuke
   cargo watch -c -x run
 
 # run the penumbra-operator against the present k8s context

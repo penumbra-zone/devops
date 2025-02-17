@@ -503,7 +503,10 @@ impl PenumbraNode {
         let container_name = "pd".to_owned();
         Container {
             name: container_name,
-            image: Some(format!("{PENUMBRA_IMAGE_REPO}:{PENUMBRA_IMAGE_TAG}")),
+            image: Some(format!(
+                "{PENUMBRA_IMAGE_REPO}:{}",
+                self.spec.image_tag.clone().expect("image tag is required")
+            )),
             command: Some(
                 // TODO convert these options to env vars,
                 // to make them more easily overrideable.
@@ -878,7 +881,7 @@ impl PenumbraNode {
         let pod_api: Api<Pod> = Api::namespaced(client.clone(), namespace);
         match pod_api.get(&self.release_name()).await {
             Ok(_pod_old) => {
-                tracing::debug!("patching Pod<{}>", self.release_name());
+                tracing::trace!("patching Pod<{}>", self.release_name());
                 let patch = Patch::Apply(&pod);
                 let params = PatchParams::apply(crate::OPERATOR_NAME);
                 match pod_api
@@ -925,7 +928,7 @@ impl PenumbraNode {
         let svc_api: Api<Service> = Api::namespaced(client.clone(), namespace);
         match svc_api.get(&self.release_name()).await {
             Ok(_svc_old) => {
-                tracing::debug!("patching Service<{}>", self.release_name());
+                tracing::trace!("patching Service<{}>", self.release_name());
                 let patch = Patch::Merge(&svc);
                 let params = PatchParams::default();
                 let _svc_new = svc_api

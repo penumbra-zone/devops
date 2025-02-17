@@ -582,7 +582,7 @@ impl PenumbraNetwork {
             Ok(_) => {
                 let patch = Patch::Merge(&cm);
                 let params = PatchParams::default();
-                tracing::debug!("patching ConfigMap<{}>", &cm_name);
+                tracing::trace!("patching ConfigMap<{}>", &cm_name);
                 cm_api.patch(&cm_name, &params, &patch).await?;
             }
             Err(_e) => {
