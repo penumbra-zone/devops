@@ -71,24 +71,34 @@ pub struct PenumbraNetworkSpec {
     /// The unique identifier for the chain.
     chain_id: String,
     /// How many validators will be configured at genesis.
-    num_validators: Option<u64>,
-    /// Whether to allow local, intra-cluster addresses.
-    /// Defaults to true.
-    allow_local_addresses: Option<bool>,
+    #[serde(default = "default_num_validators")]
+    num_validators: u64,
 
     // Chain params
-    epoch_duration: Option<u64>,
-    proposal_voting_blocks: Option<u64>,
+    #[serde(default = "default_epoch_duration")]
+    epoch_duration: u64,
+    #[serde(default = "default_proposal_voting_blocks")]
+    proposal_voting_blocks: u64,
+}
+
+// Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
+fn default_num_validators() -> u64 {
+    DEFAULT_NUM_VALIDATORS
+}
+fn default_proposal_voting_blocks() -> u64 {
+    DEFAULT_PROPOSAL_VOTING_BLOCKS
+}
+fn default_epoch_duration() -> u64 {
+    DEFAULT_EPOCH_DURATION
 }
 
 impl Default for PenumbraNetworkSpec {
     fn default() -> Self {
         Self {
             chain_id: "i-didnt-edit-the-config-1".to_owned(),
-            num_validators: Some(DEFAULT_NUM_VALIDATORS),
-            allow_local_addresses: Some(true),
-            epoch_duration: Some(DEFAULT_EPOCH_DURATION),
-            proposal_voting_blocks: Some(DEFAULT_PROPOSAL_VOTING_BLOCKS),
+            num_validators: DEFAULT_NUM_VALIDATORS,
+            epoch_duration: DEFAULT_EPOCH_DURATION,
+            proposal_voting_blocks: DEFAULT_PROPOSAL_VOTING_BLOCKS,
         }
     }
 }
@@ -280,17 +290,14 @@ impl PenumbraNetwork {
     #[tracing::instrument]
     fn validator_metadata(&self) -> Vec<ValidatorMetadata> {
         let mut results = Vec::<ValidatorMetadata>::new();
-        for i in 0..self.spec.num_validators.unwrap_or(DEFAULT_NUM_VALIDATORS) {
+        for i in 0..self.spec.num_validators {
             let v = ValidatorMetadata {
                 name: format!("Penumbra Labs CI {}", i),
                 ..Default::default()
             };
             results.push(v);
         }
-        assert_eq!(
-            results.len() as u64,
-            self.spec.num_validators.unwrap_or(DEFAULT_NUM_VALIDATORS)
-        );
+        assert_eq!(results.len() as u64, self.spec.num_validators);
         results
     }
 
@@ -336,7 +343,7 @@ impl PenumbraNetwork {
         // The first two are created by PenumbraNode, the second by PenumbraNetwork. The second two
         // should match the first two.
 
-        for i in 0..self.spec.num_validators.unwrap_or(DEFAULT_NUM_VALIDATORS) {
+        for i in 0..self.spec.num_validators {
             let pvc_name = self.val_pvc_name(i);
             let pvc = PersistentVolumeClaim {
                 metadata: ObjectMeta {
@@ -375,32 +382,17 @@ impl PenumbraNetwork {
             },
             EnvVar {
                 name: "PENUMBRA_NETWORK_NUM_VALIDATORS".to_owned(),
-                value: Some(
-                    self.spec
-                        .num_validators
-                        .unwrap_or(DEFAULT_NUM_VALIDATORS)
-                        .to_string(),
-                ),
+                value: Some(self.spec.num_validators.to_string()),
                 value_from: None,
             },
             EnvVar {
                 name: "PENUMBRA_NETWORK_EPOCH_DURATION".to_owned(),
-                value: Some(
-                    self.spec
-                        .epoch_duration
-                        .unwrap_or(DEFAULT_EPOCH_DURATION)
-                        .to_string(),
-                ),
+                value: Some(self.spec.epoch_duration.to_string()),
                 value_from: None,
             },
             EnvVar {
                 name: "PENUMBRA_NETWORK_PROPOSAL_VOTING_BLOCKS".to_owned(),
-                value: Some(
-                    self.spec
-                        .proposal_voting_blocks
-                        .unwrap_or(DEFAULT_PROPOSAL_VOTING_BLOCKS)
-                        .to_string(),
-                ),
+                value: Some(self.spec.proposal_voting_blocks.to_string()),
                 value_from: None,
             },
             EnvVar {
@@ -429,7 +421,7 @@ impl PenumbraNetwork {
         // Format the `--peer-address-template`, so that the `pd network generate`
         // command can include address info (bundled with corresponding pubkey)
         // in the generated CometBFT configs.
-        if self.spec.num_validators.unwrap_or(DEFAULT_NUM_VALIDATORS) > 1 {
+        if self.spec.num_validators > 1 {
             // There's no trailing zero on the service name, so strip
 
             // l
@@ -475,7 +467,7 @@ impl PenumbraNetwork {
             ..Default::default()
         });
 
-        for i in 0..self.spec.num_validators.unwrap_or(DEFAULT_NUM_VALIDATORS) {
+        for i in 0..self.spec.num_validators {
             let val_name = self.val_name(i);
             let val_pvc_name = self.val_pvc_name(i);
             volume_mounts.push(VolumeMount {
@@ -739,7 +731,7 @@ impl PenumbraNetwork {
                     bootstrap_url: None,
                     // Force early publication of Endpoints to Services,
                     // so the validators can communicate immediately.
-                    publish_not_ready_addresses: Some(true),
+                    publish_not_ready_addresses: true,
                     ..Default::default()
                 },
             };

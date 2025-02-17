@@ -71,9 +71,11 @@ pub struct PenumbraNodeSpec {
     /// marking them explicitly as part of a greater whole.
     pub network_name: Option<String>,
     /// Container image spec, without tag suffix.
-    pub image_repo: Option<String>,
+    #[serde(default = "default_image_repo")]
+    pub image_repo: String,
     /// Container image tag to fetch from remote `image_repo`.
-    pub image_tag: Option<String>,
+    #[serde(default = "default_image_tag")]
+    pub image_tag: String,
     /// Public RPC endpoint for an already-existing remote node,
     /// to fetch information about the network. If `None`,
     /// the init script will not touch local state before starting services.
@@ -81,7 +83,8 @@ pub struct PenumbraNodeSpec {
     /// Remote URL to fetch a state archive, for extracting pre-upgrade blocks.
     pub archive_url: Option<String>,
     /// Whether to enable ABCI event indexing via CometBFT to a PostgreSQL database.
-    pub enable_indexing: Option<bool>,
+    #[serde(default)]
+    pub enable_indexing: bool,
     /// Optional override for naming the PVC that stores node info.
     /// Useful for reusing the PenumbraNode logic to create validators
     /// via PenumbraNetwork.
@@ -91,7 +94,8 @@ pub struct PenumbraNodeSpec {
     /// Necessary for genesis validators, which won't be Ready until
     /// its services are up, but they need to talk to each other through
     /// services in order to work.
-    pub publish_not_ready_addresses: Option<bool>,
+    #[serde(default)]
+    pub publish_not_ready_addresses: bool,
 
     /// Optional hard-coded seed settings for CometBFT.
     /// Should be formatted as full CometBFT URLs:
@@ -99,23 +103,34 @@ pub struct PenumbraNodeSpec {
 
     /// Specify the type of node. Affects which labels are added,
     /// to help with selection. Defaults to 'FullNode'.
-    pub node_type: Option<NodeType>,
+    #[serde(default)]
+    pub node_type: NodeType,
+}
+
+// Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
+fn default_image_tag() -> String {
+    PENUMBRA_IMAGE_TAG.to_owned()
+}
+
+// Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
+fn default_image_repo() -> String {
+    PENUMBRA_IMAGE_REPO.to_owned()
 }
 
 impl Default for PenumbraNodeSpec {
     fn default() -> Self {
         Self {
             moniker: moniker(),
-            image_repo: Some(crate::PENUMBRA_IMAGE_REPO.to_owned()),
-            image_tag: Some(crate::PENUMBRA_IMAGE_TAG.to_owned()),
+            image_repo: crate::PENUMBRA_IMAGE_REPO.to_owned(),
+            image_tag: crate::PENUMBRA_IMAGE_TAG.to_owned(),
             bootstrap_url: Some(DEFAULT_BOOTSTRAP_URL.to_owned()),
             archive_url: None,
             network_name: None,
-            enable_indexing: Some(false),
+            enable_indexing: false,
             node_state_pvc_name: None,
-            publish_not_ready_addresses: Some(false),
+            publish_not_ready_addresses: false,
             seeds: None,
-            node_type: Some(NodeType::FullNode),
+            node_type: NodeType::FullNode,
         }
     }
 }
@@ -126,8 +141,9 @@ impl fmt::Display for PenumbraNode {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, JsonSchema)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, JsonSchema, Default)]
 pub enum NodeType {
+    #[default]
     FullNode,
     Validator,
     GenesisValidator,
@@ -198,11 +214,7 @@ impl PenumbraNode {
             ("app.kubernetes.io/part-of".to_owned(), self.release_name()),
             (
                 format!("{}/node-type", crate::OPERATOR_NAME),
-                self.spec
-                    .node_type
-                    .clone()
-                    .unwrap_or(NodeType::FullNode)
-                    .to_string(),
+                self.spec.node_type.clone().to_string(),
             ),
         ]));
         l
@@ -211,7 +223,7 @@ impl PenumbraNode {
     pub fn pod(&self) -> Pod {
         let mut containers = vec![self.pd_container(), self.cometbft_container()];
         // Opt in to ABCI event indexing
-        if self.spec.enable_indexing.unwrap_or_default() {
+        if self.spec.enable_indexing {
             containers.push(self.postgres_container());
         }
         Pod {
@@ -280,7 +292,7 @@ impl PenumbraNode {
             .collect();
 
         let mut db_ports: Vec<ServicePort> = Vec::new();
-        if self.spec.enable_indexing.unwrap_or_default() {
+        if self.spec.enable_indexing {
             db_ports = self
                 .postgres_container()
                 .ports
@@ -310,9 +322,7 @@ impl PenumbraNode {
                 // which m akes it a headless service, suitable for StatefulSets.
                 cluster_ip: Some("None".to_string()),
                 ports: Some(ports),
-                publish_not_ready_addresses: Some(
-                    self.spec.publish_not_ready_addresses.unwrap_or_default(),
-                ),
+                publish_not_ready_addresses: Some(self.spec.publish_not_ready_addresses),
                 // Set only one label on the selector, that of the release name,
                 // which will be unique across all CRDs.
                 selector: Some(BTreeMap::from([(
@@ -346,7 +356,7 @@ impl PenumbraNode {
             }),
             ..Default::default()
         }];
-        if self.spec.enable_indexing.unwrap_or_default() {
+        if self.spec.enable_indexing {
             vols.push(Volume {
                 name: "postgres-schema".to_owned(),
                 config_map: Some(ConfigMapVolumeSource {
@@ -413,7 +423,7 @@ impl PenumbraNode {
             ..Default::default()
         }];
         // TODO: ditch separate PVC for db, just submount into primary setup
-        if self.spec.enable_indexing.unwrap_or_default() {
+        if self.spec.enable_indexing {
             claims.push(PersistentVolumeClaim {
                 metadata: ObjectMeta {
                     name: Some(format!(
@@ -479,7 +489,7 @@ impl PenumbraNode {
             });
         }
         // Opt in to ABCI event indexing.
-        if self.spec.enable_indexing.unwrap_or_default() {
+        if self.spec.enable_indexing {
             env.push(EnvVar {
                 name: "PENUMBRA_COMETBFT_INDEXER".to_string(),
                 value: Some("psql".to_string()),
@@ -504,8 +514,9 @@ impl PenumbraNode {
         Container {
             name: container_name,
             image: Some(format!(
-                "{PENUMBRA_IMAGE_REPO}:{}",
-                self.spec.image_tag.clone().expect("image tag is required")
+                "{}:{}",
+                self.spec.image_repo.clone(),
+                self.spec.image_tag.clone()
             )),
             command: Some(
                 // TODO convert these options to env vars,
@@ -573,7 +584,11 @@ impl PenumbraNode {
 
         Container {
             name: container_name,
-            image: Some(format!("{PENUMBRA_IMAGE_REPO}:{PENUMBRA_IMAGE_TAG}")),
+            image: Some(format!(
+                "{}:{}",
+                self.spec.image_repo.clone(),
+                self.spec.image_tag.clone()
+            )),
             command: Some(vec![format!("/opt/penumbra/{PD_INIT_SCRIPT_NAME}")]),
             env: Some(self.pd_env()),
             // Run as root during init, so we can shown to penumbra & cometbft users.
@@ -902,6 +917,15 @@ impl PenumbraNode {
                             );
                             Self::delete_and_wait(&pod_api, &self.release_name()).await?;
                             pod_api.create(&PostParams::default(), &pod).await?;
+                        } else if err.code == 409 {
+                            // Unprocessable Entity
+                            tracing::warn!(
+                                "failed to patch Pod<{}>: {}, recreating it",
+                                self.release_name(),
+                                err,
+                            );
+                            Self::delete_and_wait(&pod_api, &self.release_name()).await?;
+                            pod_api.create(&PostParams::default(), &pod).await?;
                         } else {
                             tracing::warn!(
                                 "received error code '{}' on PATCH to Pod<{}>",
@@ -969,6 +993,8 @@ impl PenumbraNode {
 mod tests {
     use super::*;
 
+    use crate::PENUMBRA_IMAGE_REPO;
+    use crate::PENUMBRA_IMAGE_TAG;
     #[test]
     fn from_specs() {
         let fullnode = PenumbraNode::new(
@@ -980,5 +1006,15 @@ mod tests {
         );
         let pod = fullnode.pod();
         assert_eq!(pod.metadata.name.unwrap(), fullnode.release_name());
+
+        let container_image = pod.spec.clone().expect("pod must have spec").containers[0]
+            .image
+            .clone()
+            .expect("pod must have image")
+            .to_string();
+        assert_eq!(
+            format!("{PENUMBRA_IMAGE_REPO}:{PENUMBRA_IMAGE_TAG}"),
+            container_image
+        );
     }
 }

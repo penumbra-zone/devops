@@ -41,9 +41,11 @@ deploy:
 
 # Nuke everything
 nuke:
-    kubectl -n penumbra-operator-testing get penumbranodes -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
-    kubectl get crd -o name | rg penumbra.zone | xargs -r kubectl delete --cascade=foreground
-    kubectl -n penumbra-operator-testing delete sts -l app.kubernetes.io/managed-by=penumbra-operator --cascade=foreground
+    kubectl -n penumbra-operator-testing get penumbranodes-o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
+    kubectl -n penumbra-operator-testing get penumbranetworks -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
+    # kubectl get crd -o name | rg penumbra.zone | xargs -r kubectl delete --cascade=foreground
+    # kubectl -n penumbra-operator-testing delete pod -l app.kubernetes.io/managed-by=penumbra-operator --cascade=foreground
+    kubectl -n penumbra-operator-testing get pvc -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
 
 # build the containerfile for the operator
 container:

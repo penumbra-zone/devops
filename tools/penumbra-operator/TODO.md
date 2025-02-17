@@ -65,5 +65,6 @@ Then we can auto-default everything else. That means resources to deploy would b
       - [ ] penumbra-operator deploy --moniker --join-url
       - [ ] penumbra-operator delete --moniker
       - [ ] penumbra-operator create-network --chain-id
+  - [ ] penumbra-operator pause <node|network>
   - [ ] penumbra-operator crdgen # port from existing bin
   - [ ] penumbra-operator install # uses crdgen

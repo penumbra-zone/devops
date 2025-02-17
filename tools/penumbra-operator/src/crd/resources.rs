@@ -2,9 +2,6 @@
 //! from the CRD spec's configuration.
 use std::collections::BTreeMap;
 
-// use crate::PENUMBRA_IMAGE_REPO;
-// use crate::PENUMBRA_IMAGE_TAG;
-
 pub(crate) const DB_PVC_NAME: &str = "penumbra-db";
 pub(crate) const PD_NODE_STATE_PVC_NAME: &str = "penumbra-config";
 
