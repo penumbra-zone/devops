@@ -12,12 +12,12 @@ pub const OPERATOR_GROUP: &str = "penumbra.zone";
 /// The container image repository for the Penumbra images.
 pub const PENUMBRA_IMAGE_REPO: &str = "ghcr.io/penumbra-zone/penumbra";
 /// The container tag used for Penumbra images.
-pub const PENUMBRA_IMAGE_TAG: &str = "v0.81.3";
+pub const PENUMBRA_IMAGE_TAG: &str = "v1.0.2";
 
 /// The container image repository for CometBFT images.
 pub const COMETBFT_IMAGE_REPO: &str = "docker.io/cometbft/cometbft";
 /// The container tag used for CometBFT images.
-pub const COMETBFT_IMAGE_TAG: &str = "v0.37.11";
+pub const COMETBFT_IMAGE_TAG: &str = "v0.37.15";
 
 /// The container image repository for Postgres images.
 pub const POSTGRES_IMAGE_REPO: &str = "docker.io/library/postgres";

@@ -1,5 +1,7 @@
 # rerun the penumbra-operator against the present k8s context
 dev:
+  minikube start
+  just nuke
   cargo watch -c -x run
 
 # run the penumbra-operator against the present k8s context
@@ -41,9 +43,9 @@ deploy:
 
 # Nuke everything
 nuke:
-    kubectl -n penumbra get penumbranodes -o name | xargs -r kubectl -n penumbra delete --cascade=foreground
-    kubectl -n penumbra delete sts,pvc -l app.kubernetes.io/managed-by=penumbra-operator --cascade=foreground
-    kubectl get crd -o name | rg penumbranodes.penumbra.zone | xargs -r kubectl delete --cascade=foreground
+    kubectl -n penumbra-operator-testing get penumbranodes -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
+    kubectl get crd -o name | rg penumbra.zone | xargs -r kubectl delete --cascade=foreground
+    kubectl -n penumbra-operator-testing delete sts -l app.kubernetes.io/managed-by=penumbra-operator --cascade=foreground
 
 # build the containerfile for the operator
 container:
@@ -69,5 +71,5 @@ test:
 
 # run integration tests; PERFORMS DESTRUCTIVE ACTIONS AGAINST REAL CLUSTER
 integration:
-  RUST_LOG=debug cargo nextest run --features network-integration --nocapture
+  RUST_LOG=penumbra-reindexer=debug cargo nextest run --features network-integration --nocapture
   # RUST_LOG=debug cargo test --features network-integration -- --nocapture

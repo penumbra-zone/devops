@@ -42,6 +42,9 @@ impl AsyncTestContext for TestProcesses {
             .spawn()
             .expect("Failed to start operator");
 
+        // Wait for operator to apply CRDs, otherwise immediate creation will fail.
+        std::thread::sleep(std::time::Duration::from_secs(5));
+
         eprintln!("Started operator process with PID: {}", operator.id());
 
         TestProcesses { operator }
