@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# Admin script to facilitate working with Penumbra event databases.
+# When `pindexer` schemas change, an operator must rerun the new version of `pindexer`
+# against a pre-existing CometBFT event database. This script eases that tedious process.`
+#
+# The technical checklist of tasks to perform is as follows:
+#
+#  1. [x] Stop relevant indexing node (otherwise blocks are incomplete in db)
+#  2. [x] Dump database locally
+#  3. [x] Purge local db
+#  4. [x] Restore local db
+#  5. [x] Run pindexer against local db
+#  6. [x] Dump reindexed db
+#  7. [ ] Drop cloud db (might need to bounce services to break active connections)
+#  8. [ ] Restore cloud db
+#  9. [ ] Bounce services
+#
+# Not all actions are supported yet, thus the checklist.
+set -euo pipefail
+
+
+# Initialize vars. TODO: customize based on testnet/mainnet environment.
+PENUMBRA_ENVIRONMENT="${PENUMBRA_ENVIRONMENT:-}"
+PENUMBRA_INDEXING_NODE=""
+PENUMBRA_GENESIS_JSON_URL=""
+DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH="penumbra_raw.dump"
+DB_WRANGLER_PINDEXER_DUMP_LOCAL_FILEPATH="pindexer.dump"
+# Permitted actions the script can perform
+DB_WRANGLER_ACTIONS=""
+# Each action has a human-readable name for display.
+DB_WRANGLER_ACTION_DUMP="dump from cloud"
+DB_WRANGLER_ACTION_IMPORT="import locally"
+DB_WRANGLER_ACTION_REINDEX="reindex locally"
+DB_WRANGLER_ACTION_RESTORE="restore to cloud"
+# Database connections
+DB_WRANGLER_LOCAL_SRC_DB_URL="postgresql://127.0.0.1:6666/penumbra_raw"
+DB_WRANGLER_LOCAL_DST_DB_URL="postgresql://127.0.0.1:6666/pindexer"
+
+# Check for required dependencies on PATH
+function check_deps() {
+  if ! hash gum > /dev/null 2>&1 ; then
+    >&2 echo "ERROR: 'gum' not found on PATH."
+    exit 1
+  fi
+
+  # Check for pindexer on path.
+  if ! hash pindexer > /dev/null 2>&1 ; then
+    >&2 echo "ERROR: pindexer not found on PATH"
+    >&2 echo "Activate the nix env to get an appropriate version"
+    exit 1
+  fi
+}
+
+# Use prompts to determine which environment (testnet/mainnet)
+# should be used when accessing databases.
+function get_penumbra_environment() {
+  # Only prompt if the env var wasn't set elsewhere.
+  if [[ -z "$PENUMBRA_ENVIRONMENT" ]] ; then
+    echo "Which environment do you want to manage?"
+    PENUMBRA_ENVIRONMENT="$(gum choose "testnet" "mainnet")"
+    echo "Got it, considering only '$PENUMBRA_ENVIRONMENT' databases"
+  fi
+
+  if [[ "$PENUMBRA_ENVIRONMENT" = "testnet" ]] ; then
+    PENUMBRA_INDEXING_NODE="scribe.plinfra.net"
+    PENUMBRA_GENESIS_JSON_URL="https://artifacts.plinfra.net/penumbra-testnet-phobos-2/genesis-0.json"
+  elif [[ "$PENUMBRA_ENVIRONMENT" = "mainnet" ]] ; then
+    PENUMBRA_INDEXING_NODE="silt.plinfra.net"
+    PENUMBRA_GENESIS_JSON_URL="https://artifacts.plinfra.net/penumbra-1/genesis-0.json"
+  else
+    >&2 echo "ERROR: penumbra environment '$PENUMBRA_ENVIRONMENT' not supported"
+  fi
+}
+
+# Prompt user for intended action to perform, e.g. just dump or dump-and-restore
+function get_intended_actions() {
+  DB_WRANGLER_ACTIONS="$(gum choose --no-limit \
+    "$DB_WRANGLER_ACTION_DUMP" \
+    "$DB_WRANGLER_ACTION_IMPORT" \
+    "$DB_WRANGLER_ACTION_REINDEX" \
+    "$DB_WRANGLER_ACTION_RESTORE")"
+}
+
+# Connect to the remote database and generate a dump file locally.
+function dump_cloud_db_locally() {
+  gum log -s --level debug -t rfc3339 "Pausing indexing node, to sync database: $PENUMBRA_INDEXING_NODE"
+  ssh "$PENUMBRA_INDEXING_NODE" sudo systemctl stop penumbra cometbft
+  # sleep for a full block time, to give cometbft time to shut down
+  sleep 5 &
+  # Grab database URL by SSHing into the indexing node and reading it out of the config.
+  # Makes it a little easier than reading from encrypted vars locally.
+  remote_db_url="$(ssh "$PENUMBRA_INDEXING_NODE" sudo cat ~penumbra/.penumbra/network_data/node0/cometbft/config/config.toml | dasel -r toml tx_index.psql-conn --write plain)"
+  wait
+  gum spin --title "Dumping cloud CometBFT event db" -- \
+    pg_dump -d "$remote_db_url" -Fc -f "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
+  gum log -s --level debug -t rfc3339 "Resuming indexing node, post-dump: $PENUMBRA_INDEXING_NODE"
+  # restart the node, it can index again
+  ssh "$PENUMBRA_INDEXING_NODE" sudo systemctl restart penumbra cometbft
+  gum log -s --level info -t rfc3339 "Cloud CometBFT event db dump saved locally"
+}
+
+# Ensure the process-compose setup for postgres is not running
+function stop_local_postgres() {
+  process-compose --use-uds --unix-socket compose/.share/pc-postgres.sock down localhost > /dev/null 2>&1 || true
+}
+
+# Create a local postgres database, from a clean slate, in a child directory.
+# This pg setup will be used to restore local dbs.
+function prep_local_dbs_via_process_compose() {
+  stop_local_postgres
+  rm -rf compose/.share/pindexer-postgres
+  process-compose up --config compose/postgres-for-pindexer.yml --detached --use-uds \
+    --unix-socket compose/.share/pc-postgres.sock \
+    > /dev/null 2>&1
+  while true; do
+    sleep 5
+    status="$(curl -sSL --unix-socket compose/.share/pc-postgres.sock http://localhost/process/postgresql-init | jq .status -r)"
+    if [[ "$status" = "Completed" ]] ; then
+      break
+    else
+      gum log -s --level debug -t rfc3339 "Waiting for postgres to start..."
+    fi
+  done
+  # Always stop the local postgres, regardless of error
+  # Sleep briefly to allow pindexer to get killed first.
+  trap 'sleep 1; stop_local_postgres' EXIT
+}
+
+function perform_reindex() {
+  # Fetch remote genesis file.
+  curl -o /tmp/genesis-0.json -sSfL "$PENUMBRA_GENESIS_JSON_URL"
+
+  # pindexer will run forever, even when it indexes all blocks in the dumps.
+  # We'll need to query the database periodically, so we can kill pindexer
+  # when it's done.
+  sought_height="$(psql -d "$DB_WRANGLER_LOCAL_SRC_DB_URL" -c 'SELECT height FROM blocks ORDER BY height DESC LIMIT 1;' | rg -o '\d+' | head -n1)"
+
+  # Add some friendly logging info
+  # export RUST_LOG="cometindex=info"
+  gum log -s --level info -t rfc3339 "Running pindexer locally, to height ${sought_height}"
+  pindexer -g /tmp/genesis-0.json -s "$DB_WRANGLER_LOCAL_SRC_DB_URL" -d "$DB_WRANGLER_LOCAL_DST_DB_URL" &
+  pindexer_pid="$!"
+  # Trap only on error, in case we exit early.
+  trap 'kill -9 $pindexer_pid' ERR
+
+  while true; do
+    # Long sleep mostly to avoid noisy logs
+    sleep 180
+    current_height="$(psql -d "$DB_WRANGLER_LOCAL_DST_DB_URL" -c 'SELECT height FROM block_details ORDER BY height DESC LIMIT 1;' | rg -o '\d+' | head -n1)"
+    # Off-by-one tolerance because the CometBFT db may be 1 higher than pindexer can be.
+    if [[ "$current_height" = "$sought_height" ]] || [[ "$current_height" = "$(( sought_height - 1 ))" ]]; then
+      gum log -s --level info -t rfc3339 "Pindexer run finished! Indexed all blocks up to $current_height"
+      # Kill here so the 'wait' line below will unblock
+      kill "$pindexer_pid"
+      break
+    else
+      gum log -s --level debug -t rfc3339 "pindexer still running, at block $current_height / $sought_height"
+    fi
+  done
+  wait
+  gum log -s --level info -t rfc3339 "Local reindex finished"
+
+  # TODO: break the rest into separate fn?
+  rm -f "$DB_WRANGLER_PINDEXER_DUMP_LOCAL_FILEPATH"
+  gum spin --title "Dumping reindexed pindexer database locally..." -- \
+    pg_dump -d "$DB_WRANGLER_LOCAL_DST_DB_URL" -Fc -f "$DB_WRANGLER_PINDEXER_DUMP_LOCAL_FILEPATH"
+  gum log -s --level info -t rfc3339 "Dump is available locally at: $DB_WRANGLER_PINDEXER_DUMP_LOCAL_FILEPATH"
+  gum log -s --level warn -t rfc3339 "Reindexed database not yet restored to cloud endpoint. Do that manually!"
+}
+
+# Primary script entrypoint
+function main() {
+  check_deps
+  gum log -s --level info -t rfc3339 "Beginning database maintenance"
+  get_penumbra_environment
+  get_intended_actions
+
+  if grep -qP "$DB_WRANGLER_ACTION_DUMP" <<< "$DB_WRANGLER_ACTIONS" ; then
+    dump_cloud_db_locally
+  else
+    if [[ ! -e "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH" ]] ; then
+      >&2 echo "ERROR: dump action was not requested, but no local dump exists at $DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
+      exit 1
+    else
+      gum log -s --level debug -t rfc3339 "Found local dump, reusing: $DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
+    fi
+  fi
+
+  if grep -qP "$DB_WRANGLER_ACTION_IMPORT" <<< "$DB_WRANGLER_ACTIONS" ; then
+    gum log -s --level debug -t rfc3339 "Preparing local databases for import"
+    prep_local_dbs_via_process_compose
+
+    gum spin --show-error --title "Importing dumped database to localhost" -- \
+      pg_restore --exit-on-error --clean --if-exists \
+      --role penumbra --jobs "$(nproc)" --no-owner --no-acl \
+      -d "$DB_WRANGLER_LOCAL_SRC_DB_URL" "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
+    gum log -s --level debug -t rfc3339 "Restored dump to local database"
+  fi
+
+  if grep -qP "$DB_WRANGLER_ACTION_REINDEX" <<< "$DB_WRANGLER_ACTIONS" ; then
+    perform_reindex
+  fi
+  gum log -s --level info -t rfc3339 "All actions complete"
+}
+
+main
+exit 0
