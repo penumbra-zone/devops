@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Admin script to facilitate working with Penumbra event databases.
 # When `pindexer` schemas change, an operator must rerun the new version of `pindexer`
+  set -o pipefail
 # against a pre-existing CometBFT event database. This script eases that tedious process.`
 #
 # The technical checklist of tasks to perform is as follows:
