@@ -1,8 +1,13 @@
+use anyhow::Context;
 use clap::Parser;
 use inquire::{MultiSelect, Select};
+use std::fs::canonicalize;
 use std::io::Write;
 use std::io::{stderr, IsTerminal as _};
 use std::path::PathBuf;
+use std::process::Command;
+use std::str::FromStr;
+use tempfile::TempDir;
 use tokio_stream::StreamExt;
 use tracing_subscriber::EnvFilter;
 use url::Url;
@@ -14,28 +19,84 @@ const ACTION_IMPORT: &str = "import locally";
 const ACTION_REINDEX: &str = "reindex locally";
 const ACTION_RESTORE: &str = "restore to cloud";
 
+/// Which network should be used, "testnet" or "mainnet".
+/// Shorthand for using chain-ids.
+#[derive(Debug, Default, Clone)]
+enum PenumbraEnvironment {
+    #[default]
+    /// The PL-run public testnet, identified by chain-id `penumbra-testnet-phobos-2`.
+    Testnet,
+    /// The primary public network, identified by chain-id `penumbra-testnet-phobos-2`.
+    Mainnet,
+}
+
+// Implement FromStr for your enum
+impl FromStr for PenumbraEnvironment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "testnet" => Ok(Self::Testnet),
+            "mainnet" => Ok(Self::Mainnet),
+            _ => Err(anyhow::anyhow!(format!(
+                "Unrecognized Penumbra environment: {}",
+                s
+            ))),
+        }
+    }
+}
+
+use std::fmt::Display;
+impl Display for PenumbraEnvironment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PenumbraEnvironment::Testnet => write!(f, "testnet"),
+            PenumbraEnvironment::Mainnet => write!(f, "mainnet"),
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Which network to manage, "testnet" or "mainnet"
+    #[arg(long, value_parser = PenumbraEnvironment::from_str, default_value_t)]
+    penumbra_environment: PenumbraEnvironment,
+
+    /// Database url for the CometBFT events database,
+    /// used for dumping and importing locally, so the pindexer
+    /// run communicates over local sockets.
     #[arg(long)]
-    penumbra_environment: String,
+    cometbft_src_database_url: Option<String>,
+
+    /// URL for a database dump of a CometBFT events database,
+    /// used importing locally, serving as the src db for the
+    /// pindexer run.
+    #[arg(long)]
+    cometbft_src_dump_url: Option<Url>,
+
+    /// Database url for the remote pindexer database,
+    /// to which the local reindex will be restored.
+    #[arg(long)]
+    pindexer_dst_database_url: Option<String>,
 
     /// Filepath to write pgdump for cometbft db.
     #[arg(long)]
-    cometbft_dump_filepath: PathBuf,
+    cometbft_dump_filepath: Option<PathBuf>,
 
     /// Filepath to write pgdump for pindexer db.
     #[arg(long)]
-    pindexer_dump_filepath: PathBuf,
+    pindexer_dump_filepath: Option<PathBuf>,
+
+    /// Directory for storing local databases and dump files.
+    /// By default, a temporary directory will be used, ensuring
+    /// all artifacts are cleaned up after the run.
+    #[arg(long)]
+    working_directory: Option<PathBuf>,
 
     /// Enable verbose mode
     #[arg(short, long)]
     verbose: bool,
-
-    /// Optional configuration file
-    #[arg(short, long)]
-    config: Option<String>,
 }
 
 /// All the options that are network-specific
@@ -47,7 +108,8 @@ struct NetworkConfig {
 
 /// Confirm that required programs are available on `PATH`.
 fn check_deps() -> anyhow::Result<()> {
-    let wanted_programs = vec!["pindexer", "pg_dump", "psql", "kubectl"];
+    // let wanted_programs = vec!["pindexer", "pg_dump", "psql", "kubectl"];
+    let wanted_programs = vec!["pindexer", "pg_dump", "pg_restore", "psql"];
     let mut found_programs = Vec::<&str>::new();
     // let mut result = false;
     for p in wanted_programs.iter() {
@@ -82,16 +144,26 @@ fn get_intended_actions() -> anyhow::Result<Vec<String>> {
     Ok(choices.into_iter().map(|s| s.to_owned()).collect())
 }
 
-/// Create a PostgreSQL database dump of the target db, as defined by the `database_url`
-/// connection string. Will be formated as a "custom" pg dump.
-fn dump_database(database_url: &str, dest_file: &PathBuf) -> anyhow::Result<()> {
-    let status = std::process::Command::new("pg_dump")
+/// Restore a PostgreSQL database dump to the target db, as defined by the `database_url`
+/// connection string.
+#[tracing::instrument]
+fn restore_database(database_url: &str, dump_file: &PathBuf) -> anyhow::Result<()> {
+    // pg_restore --exit-on-error --clean --if-exists \
+    // --role penumbra --jobs "$(nproc)" --no-owner --no-acl \
+    // -d "$DB_WRANGLER_LOCAL_SRC_DB_URL" "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
+    tracing::warn!(?database_url, "beginning restore");
+    let status = Command::new("pg_restore")
         .args([
+            "--exit-on-error",
+            "--clean",
+            "--if-exists",
+            "--jobs",
+            "10",
+            "--no-owner",
+            "--no-acl",
             "-d",
             database_url,
-            "-Fc",
-            "-f",
-            dest_file
+            dump_file
                 .to_str()
                 .expect("failed to convert PathBuf to str"),
         ])
@@ -99,73 +171,152 @@ fn dump_database(database_url: &str, dest_file: &PathBuf) -> anyhow::Result<()> 
     if status.success() {
         Ok(())
     } else {
-        anyhow::bail!("failed to dump src database");
+        anyhow::bail!("failed to restore database");
     }
 }
 
-fn main() -> anyhow::Result<()> {
+/// Create a PostgreSQL database dump of the target db, as defined by the `database_url`
+/// connection string. Will be formated as a "custom" pg dump, and saved to the local
+/// filepath `dest_file`.
+fn dump_database(database_url: &str, dest_file: &PathBuf) -> anyhow::Result<()> {
+    let status = Command::new("pg_dump")
+        .args([
+            "-d",
+            database_url,
+            "-Fc",
+            "-f",
+            dest_file
+                .to_str()
+                .expect("failed to convert dump filepath to str"),
+        ])
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!(format!(
+            "failed to dump database to file: {}",
+            dest_file.display()
+        ));
+    }
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     init_tracing();
     check_deps()?;
-    let penumbra_environment = get_penumbra_environment()?;
+    let args = Cli::parse();
+
+    // let penumbra_environment = get_penumbra_environment()?;
     let actions = get_intended_actions()?;
     tracing::info!(?actions, "received list of actions");
 
-    let src_db_url = get_default_src_db_url(&penumbra_environment)?;
+    // Use a specific directory if requested, otherwise generate a tempdir.
+    // Paths must be canonicalized in order to generate UDS paths.
+    let d: TempDir;
+    let project_dir = match args.working_directory {
+        Some(d) => canonicalize(d)?,
+        None => {
+            d = TempDir::new()?;
+            canonicalize(PathBuf::from(d.path()))?
+        }
+    };
 
-    if actions.contains(&ACTION_DUMP.to_string()) {
-        tracing::info!("dumping database");
-        let dump = PathBuf::from("cometbft.dump");
-        dump_database(&src_db_url, &dump)?;
-        tracing::info!("done dumping");
+    // Filepath for saving the dumped database.
+    let cometbft_dump_file = project_dir.join("cometbft.dump");
+
+    // The logic here is a bit gnarly: we want to support specifying options up-front via CLI
+    // flags, but there's also the legacy interactive menus that should be honored.
+    match args.cometbft_src_dump_url {
+        Some(dump_url) => {
+            download_db_dump(&dump_url, &cometbft_dump_file).await?;
+        }
+        None => {
+            if actions.contains(&ACTION_DUMP.to_string()) {
+                tracing::info!("dumping src cometbft database to localhost");
+                match args.cometbft_src_database_url {
+                    Some(db_url) => {
+                        dump_database(&db_url, &cometbft_dump_file)?;
+                    }
+                    None => {
+                        tracing::warn!(
+                            "neither dump url nor db url were given; trying to load from k8s secrets"
+                        );
+                        let src_db_url = get_default_src_db_url(&args.penumbra_environment)?;
+                        dump_database(&src_db_url, &cometbft_dump_file)?;
+                    }
+                }
+                tracing::info!("done dumping");
+            }
+        }
     }
 
     if actions.contains(&ACTION_IMPORT.to_string()) {
-        tracing::info!("importing database");
-        let _dump = PathBuf::from("cometbft.dump");
-        unimplemented!("database import is not implemented yet");
+        tracing::info!("importing src cometbft database to local postgres instance");
+        // It's very important to use an absolute path, otherwise the
+        // unix socket syntax for postgres doesn't work. Using a tempdir
+        // gives us an absolute path easily, which is nice.
+        let mut pg_dir_for_src_db = project_dir.join("postgres-src-db");
+        std::fs::create_dir_all(pg_dir_for_src_db.clone())?;
+        pg_dir_for_src_db = canonicalize(pg_dir_for_src_db)?;
+
+        let local_src_db_url = format!(
+            // Oddly this format isn't working although docs say it should
+            // "postgresql://dbname=penumbra_raw?host={}/postgres/sock",
+            "postgresql://?dbname=penumbra_raw&host={}/postgres/sock",
+            pg_dir_for_src_db.as_os_str().to_str().unwrap()
+        );
+        tracing::debug!("running postgres for src db import...");
+        let _pg = tokio::spawn(picturesque::postgres::run(pg_dir_for_src_db));
+
+        tracing::warn!("sleeping to block on pg jawn");
+        tracing::info!(?local_src_db_url, "try connecting manually");
+        let _foo = tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+
+        tracing::debug!("restoring cometbft dump to local db...");
+        restore_database(&local_src_db_url, &cometbft_dump_file)
+            .context("failed to import cometbft db locally")?;
+        tracing::info!("cometbft event database imported");
+    }
+
+    if actions.contains(&ACTION_REINDEX.to_string()) {
+        if !actions.contains(&ACTION_IMPORT.to_string()) {
+            anyhow::bail!("cannot reindex without also importing");
+        }
+        tracing::info!("reindexing via pindexer");
+        unimplemented!("still need to hook up pindexer");
     }
 
     Ok(())
 }
 
 /// Fetch a database dump from a remote URL and store locally.
-pub async fn download_db_dump(dbdump_url: Url, dest_dir: PathBuf) -> anyhow::Result<PathBuf> {
-    let dbdump_filepath: std::path::PathBuf;
+pub async fn download_db_dump(dbdump_url: &Url, dest_file: &PathBuf) -> anyhow::Result<()> {
     // Check whether URL points to a local file
     if dbdump_url.scheme() == "file" {
-        tracing::info!(%dbdump_url, "extracting compressed node state from local file");
-        dbdump_filepath = dbdump_url.to_file_path().map_err(|e| {
-            tracing::error!(?e);
-            anyhow::anyhow!("failed to convert archive url to filepath")
-        })?;
+        tracing::error!(%dbdump_url, "file URLs not supported");
+        anyhow::bail!("failed to download file URL");
     } else {
         // Download.
-        // Here we inspect HEAD so we can infer filename.
-        tracing::info!(%dbdump_url, "downloading dbdump");
-        let response = reqwest::get(dbdump_url).await?;
-        let fname = response
-            .url()
-            .path_segments()
-            .and_then(|segments| segments.last())
-            .and_then(|name| if name.is_empty() { None } else { Some(name) })
-            .unwrap_or("dbdump.dump");
-
-        dbdump_filepath = dest_dir.join(fname);
+        // TODO: Perhaps we should do some sanity-checking on the pardir existing.
+        let response = reqwest::get(dbdump_url.clone()).await?;
+        tracing::info!(%dbdump_url, dest_file = ?dest_file, "downloading dbdump");
         let mut download_opts = std::fs::OpenOptions::new();
-        download_opts.create_new(true).write(true);
-        let mut dbdump_file = download_opts.open(&dbdump_filepath)?;
+        download_opts.create(true).truncate(true).write(true);
+        let mut dbdump = download_opts
+            .open(dest_file)
+            .context("failed to get a handle on the dbdump dest file")?;
 
         // Download via stream, in case file is too large to shove into RAM.
         let mut stream = response.bytes_stream();
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
-            dbdump_file.write_all(&chunk)?;
+            dbdump.write_all(&chunk)?;
         }
-        dbdump_file.flush()?;
-        tracing::info!("download complete: {}", dbdump_filepath.display());
+        dbdump.flush()?;
+        tracing::info!("download complete: {}", dest_file.display());
     }
 
-    Ok(dbdump_filepath)
+    Ok(())
 }
 
 /// Initialize tracing for the console.
@@ -194,7 +345,7 @@ fn init_tracing() {
 /// Requires k8s access to look up the information from a k8s Secret.
 /// This is a fallback, intended for use in PL infra tooling contexts.
 /// Non-admin users can simply provide a `--src-db-url` on the CLI.
-fn get_default_src_db_url(penumbra_environment: &str) -> anyhow::Result<String> {
+fn get_default_src_db_url(penumbra_environment: &PenumbraEnvironment) -> anyhow::Result<String> {
     use k8s_openapi::api::core::v1::Secret;
     let secret_name = format!("postgres-creds-{}-pindexer", penumbra_environment);
     let secret_field_name = "pindexer_src_database_url";
@@ -203,7 +354,7 @@ fn get_default_src_db_url(penumbra_environment: &str) -> anyhow::Result<String> 
     let output = std::process::Command::new("kubectl")
         .args([
             "-n",
-            penumbra_environment,
+            penumbra_environment.to_string().as_str(),
             "get",
             "secret",
             &secret_name,

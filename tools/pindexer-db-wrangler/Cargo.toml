@@ -17,3 +17,6 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "ansi"] }
 url = "2.5.4"
 which = "7.0.2"
+
+picturesque = { path = "../penumbra4/tools/picturesque/"}
+tempfile = "3.17.1"
