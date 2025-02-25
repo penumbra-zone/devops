@@ -7,6 +7,7 @@ use std::path::PathBuf;
 // use std::process::Command;
 use tokio_stream::StreamExt;
 
+pub mod config;
 pub mod pindexer;
 pub mod postgres;
 

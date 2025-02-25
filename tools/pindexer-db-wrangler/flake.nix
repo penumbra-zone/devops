@@ -8,7 +8,8 @@
   inputs.rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.penumbra-repo-mainnet = {
-    url = "github:penumbra-zone/penumbra/v1.0.2";
+    # url = "github:penumbra-zone/penumbra/v1.0.2";
+    url = "github:penumbra-zone/penumbra/main";
     # Reuse the nixpkgs from the current devshell.
     inputs.nixpkgs.follows = "nixpkgs"; # Use your nixpkgs
   };

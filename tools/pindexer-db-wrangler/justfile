@@ -1,2 +1,5 @@
 dev:
   cargo run -- --cometbft-src-dump-url https://artifacts.plinfra.net/penumbra-testnet-phobos-2/cometbft-dbdump-height-2600860.dump --penumbra-environment testnet
+
+dev-mainnet:
+  RUST_LOG=pindexer_db_wrangler=debug cargo run -- --cometbft-src-dump-url https://artifacts.plinfra.net/penumbra-1/cometbft-dbdump-height-3640731.dump --penumbra-environment mainnet --working-directory foobar

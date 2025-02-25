@@ -23,3 +23,4 @@ picturesque = { path = "/home/conor/src/pl/penumbra4/tools/picturesque" }
 tempfile = "3.17.1"
 sqlx = { version = "0.8.3", features = ["postgres", "json", "runtime-tokio", "tls-rustls"] }
 postgres = "0.19.10"
+directories = "6.0.0"

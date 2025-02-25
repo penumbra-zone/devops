@@ -1,23 +1,25 @@
 use anyhow::Context;
 use clap::Parser;
-use postgres::get_latest_cometbft_block_height;
 use std::fs::canonicalize;
 // use std::io::Write;
+use std::fs::create_dir_all;
 use std::io::{stderr, IsTerminal as _};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 use url::Url;
 
 mod cli;
+// mod config;
 mod pindexer;
 mod postgres;
 
 use crate::cli::Cli;
 use crate::cli::{ACTION_DUMP, ACTION_IMPORT, ACTION_REINDEX};
+use pindexer_db_wrangler::config::default_home;
 use pindexer_db_wrangler::{download_file, PenumbraEnvironment};
 
 /// All the options that are network-specific
@@ -66,9 +68,16 @@ async fn main() -> anyhow::Result<()> {
     // Paths must be canonicalized in order to generate UDS paths.
     let d: TempDir;
     let project_dir = match args.working_directory {
-        Some(d) => canonicalize(d)?,
+        Some(d) => {
+            create_dir_all(&d)?;
+            canonicalize(d)?
+        }
         None => {
-            d = TempDir::new()?;
+            // Nest the temp dir within homedir, as default system tmpdirs are likely too small
+            // for importing ~30GB of postgres data.
+            let home = default_home();
+            create_dir_all(&home)?;
+            d = Builder::new().tempdir_in(home)?;
             canonicalize(PathBuf::from(d.path()))?
         }
     };

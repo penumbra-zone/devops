@@ -110,16 +110,16 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1739565984,
-        "narHash": "sha256-euetvXcXnJw/zQ7yPQ9u+6XkgH5hErV/07lHC1qCS30=",
+        "lastModified": 1740166843,
+        "narHash": "sha256-v/+Myq/twAaykiVYYrFQI1LBqkrh8H1FHEep2AJD2mc=",
         "owner": "penumbra-zone",
         "repo": "penumbra",
-        "rev": "07a29a51e46a5260f40ea6d68d658e19094721f7",
+        "rev": "8e45795a3ed8dfcc8cd2300d036a36d6cb588a17",
         "type": "github"
       },
       "original": {
         "owner": "penumbra-zone",
-        "ref": "v1.0.2",
+        "ref": "main",
         "repo": "penumbra",
         "type": "github"
       }
