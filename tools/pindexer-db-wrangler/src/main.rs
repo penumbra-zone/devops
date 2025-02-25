@@ -14,7 +14,7 @@ mod cli;
 mod postgres;
 
 use crate::cli::Cli;
-use crate::cli::{ACTION_DUMP, ACTION_IMPORT, ACTION_REINDEX, ACTION_RESTORE};
+use crate::cli::{ACTION_DUMP, ACTION_IMPORT, ACTION_REINDEX};
 use pindexer_db_wrangler::{download_file, PenumbraEnvironment};
 
 /// All the options that are network-specific
@@ -158,9 +158,13 @@ async fn main() -> anyhow::Result<()> {
             tracing::warn!("sleeping a bit to wait for pg to start");
 
             let _foo = tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            let genesis_url = args.penumbra_environment.genesis_url();
             tracing::info!("reindexing via pindexer");
-            run_pindexer(&local_src_db_url, &local_dst_db_url, &genesis_url).await?;
+            run_pindexer(
+                &local_src_db_url,
+                &local_dst_db_url,
+                &args.penumbra_environment,
+            )
+            .await?;
         }
     }
 
@@ -179,13 +183,19 @@ async fn main() -> anyhow::Result<()> {
 pub async fn run_pindexer(
     src_db_url: &str,
     dest_db_url: &str,
-    genesis_url: &Url,
+    penumbra_environment: &PenumbraEnvironment,
 ) -> anyhow::Result<()> {
     // let genesis_file = tempfile::tempfile()?;
+    let genesis_url = penumbra_environment.genesis_url();
     let genesis_file = tempfile::NamedTempFile::new()?;
     let g = genesis_file.path().to_path_buf();
-    download_file(genesis_url, &g).await?;
-    let status = Command::new("pindexer")
+    download_file(&genesis_url, &g).await?;
+
+    // Use either `pindexer-mainnet` or `pindexer-testnet` from nix env.
+    // Temporary during LQT support push.
+    let pindexer_bin = format!("pindexer-{}", penumbra_environment);
+
+    let status = Command::new(pindexer_bin)
         .args(vec![
             "-g",
             g.as_os_str()

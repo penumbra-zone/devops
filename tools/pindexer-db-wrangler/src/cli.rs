@@ -57,7 +57,14 @@ impl Cli {
     /// Confirm that required programs are available on `PATH`.
     pub fn check_deps(&self) -> anyhow::Result<()> {
         // let wanted_programs = vec!["pindexer", "pg_dump", "psql", "kubectl"];
-        let wanted_programs = vec!["pindexer", "pg_dump", "pg_restore", "psql"];
+        let wanted_programs = vec![
+            "pindexer",
+            "pg_dump",
+            "pg_restore",
+            "psql",
+            "pindexer-testnet",
+            "pindexer-mainnet",
+        ];
         let mut found_programs = Vec::<&str>::new();
         for p in wanted_programs.iter() {
             if which(p).is_ok() {
