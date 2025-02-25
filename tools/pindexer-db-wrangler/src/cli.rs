@@ -18,8 +18,9 @@ pub const ACTION_RESTORE: &str = "restore to cloud";
 #[command(author, version, about, long_about = None)]
 pub(crate) struct Cli {
     /// Which network to manage, "testnet" or "mainnet"
-    #[arg(long, value_parser = PenumbraEnvironment::from_str, default_value_t)]
-    pub penumbra_environment: PenumbraEnvironment,
+    // #[arg(long, value_parser = PenumbraEnvironment::from_str, default_value_t)]
+    #[arg(long)]
+    pub penumbra_environment: Option<String>,
 
     /// Database url for the CometBFT events database,
     /// used for dumping and importing locally, so the pindexer
@@ -89,11 +90,12 @@ impl Cli {
         Ok(choices.into_iter().map(|s| s.to_owned()).collect())
     }
     /// Prompt interactively to ask which environment
-    pub fn get_penumbra_environment(&self) -> anyhow::Result<String> {
+    pub fn get_penumbra_environment(&self) -> anyhow::Result<PenumbraEnvironment> {
         // Order is important: the first option is selected by default.
         let options: Vec<&str> = vec!["testnet", "mainnet"];
         let choice = Select::new("Which environment do you want to manage?", options).prompt()?;
         println!("Got it, considering only '{}' databases", choice);
-        Ok(choice.to_owned())
+        let penumbra_env = PenumbraEnvironment::from_str(choice)?;
+        Ok(penumbra_env)
     }
 }

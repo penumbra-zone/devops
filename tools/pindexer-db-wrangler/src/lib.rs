@@ -70,7 +70,7 @@ pub async fn download_file(download_url: &Url, dest_path: &PathBuf) -> anyhow::R
         // Download.
         // TODO: Perhaps we should do some sanity-checking on the pardir existing.
         let response = reqwest::get(download_url.clone()).await?;
-        tracing::info!(%download_url, dest_path = ?dest_path, "downloading");
+        tracing::debug!(%download_url, dest_path = ?dest_path, "downloading");
         let mut download_opts = std::fs::OpenOptions::new();
         download_opts.create(true).truncate(true).write(true);
         let mut dbdump = download_opts
@@ -84,7 +84,7 @@ pub async fn download_file(download_url: &Url, dest_path: &PathBuf) -> anyhow::R
             dbdump.write_all(&chunk)?;
         }
         dbdump.flush()?;
-        tracing::info!("download complete: {}", dest_path.display());
+        tracing::debug!("download complete: {}", dest_path.display());
     }
 
     Ok(())
