@@ -7,6 +7,7 @@ use std::path::PathBuf;
 // use std::process::Command;
 use tokio_stream::StreamExt;
 
+pub mod pindexer;
 pub mod postgres;
 
 /// Which network should be used, "testnet" or "mainnet".

@@ -1,16 +1,19 @@
 use anyhow::Context;
 use clap::Parser;
+use postgres::get_latest_cometbft_block_height;
 use std::fs::canonicalize;
 // use std::io::Write;
 use std::io::{stderr, IsTerminal as _};
 use std::path::PathBuf;
-use std::process::Command;
 use std::str::FromStr;
+use std::time::Duration;
 use tempfile::TempDir;
+use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 use url::Url;
 
 mod cli;
+mod pindexer;
 mod postgres;
 
 use crate::cli::Cli;
@@ -125,11 +128,11 @@ async fn main() -> anyhow::Result<()> {
 
         // tracing::warn!("sleeping to block on pg jawn");
         // tracing::info!(?local_src_db_url, "try connecting manually");
-        // let _foo = tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+        // let _foo = sleep(Duration::from_secs(300)).await;
         //
         // tiny sleep: TODO we should instead check for the socket to be listening
         tracing::debug!("sleeping a bit to wait for pg to start");
-        let _foo = tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let _foo = sleep(Duration::from_secs(2)).await;
 
         tracing::debug!("restoring cometbft dump to local db...");
         postgres::restore_database(&local_src_db_url, &cometbft_dump_file)
@@ -154,15 +157,17 @@ async fn main() -> anyhow::Result<()> {
 
             // tracing::warn!("sleeping to block on pg jawn");
             // tracing::info!(?local_src_db_url, "try connecting manually");
-            // let _foo = tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+            // let _foo = sleep(Duration::from_secs(300)).await;
             //
             // tiny sleep: TODO we should instead check for the socket to be listening
             tracing::debug!("sleeping a bit to wait for pg to start");
-            let _foo = tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            run_pindexer(&local_src_db_url, &local_dst_db_url, &penumbra_environment).await?;
+            let _foo = sleep(Duration::from_secs(5)).await;
+            pindexer::run_pindexer(local_src_db_url, local_dst_db_url, &penumbra_environment)
+                .await?;
         }
     }
 
+    // Backstop on arg-parsing.
     if actions.contains(&ACTION_REINDEX.to_string())
         && !actions.contains(&ACTION_IMPORT.to_string())
     {
@@ -171,44 +176,5 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("all actions complete!");
 
-    Ok(())
-}
-
-/// Run `pindexer`, as found on PATH, reading from one database and writing to another.
-pub async fn run_pindexer(
-    src_db_url: &str,
-    dest_db_url: &str,
-    penumbra_environment: &PenumbraEnvironment,
-) -> anyhow::Result<()> {
-    // let genesis_file = tempfile::tempfile()?;
-    let genesis_url = penumbra_environment.genesis_url();
-    let genesis_file = tempfile::Builder::new()
-        .prefix("genesis-0")
-        .suffix(".json")
-        .tempfile()?;
-    let g = genesis_file.path().to_path_buf();
-    download_file(&genesis_url, &g).await?;
-
-    // Use either `pindexer-mainnet` or `pindexer-testnet` from nix env.
-    // Temporary during LQT support push.
-    let pindexer_bin = format!("pindexer-{}", penumbra_environment);
-
-    tracing::info!("reindexing via pindexer");
-    let status = Command::new(pindexer_bin)
-        .args(vec![
-            "-g",
-            g.as_os_str()
-                .to_str()
-                .expect("failed to convert genesis filepath to str"),
-            "-s",
-            src_db_url,
-            "-d",
-            dest_db_url,
-            "--exit-on-catchup",
-        ])
-        .status()?;
-    if !status.success() {
-        anyhow::bail!("failed during pindexer run");
-    }
     Ok(())
 }

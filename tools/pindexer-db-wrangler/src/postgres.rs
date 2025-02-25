@@ -100,3 +100,32 @@ pub fn get_default_src_db_url(
 
     Ok(database_url)
 }
+
+/// Wire up sqlx queries over UDS
+pub async fn get_latest_pindexer_block_height(database_url: &str) -> anyhow::Result<u64> {
+    use sqlx::postgres::PgPoolOptions;
+    let pool = PgPoolOptions::new()
+        .max_connections(1) // Only need one for a single query
+        .connect(database_url)
+        .await?;
+    // let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block_details;")
+    let count: (i64,) =
+        sqlx::query_as("SELECT height FROM block_details ORDER BY height DESC LIMIT 1;")
+            .fetch_one(&pool)
+            .await?;
+    Ok(count.0 as u64)
+}
+
+/// Wire up sqlx queries over UDS
+pub async fn get_latest_cometbft_block_height(database_url: &str) -> anyhow::Result<u64> {
+    use sqlx::postgres::PgPoolOptions;
+    let pool = PgPoolOptions::new()
+        .max_connections(1) // Only need one for a single query
+        .connect(database_url)
+        .await?;
+    // let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block_details;")
+    let count: (i64,) = sqlx::query_as("SELECT height FROM blocks ORDER BY height DESC LIMIT 1;")
+        .fetch_one(&pool)
+        .await?;
+    Ok(count.0 as u64)
+}
