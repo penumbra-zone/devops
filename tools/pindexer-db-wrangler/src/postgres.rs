@@ -1,17 +1,22 @@
 // use std::fs::File;
+use humantime::format_duration;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Instant;
 
 use crate::PenumbraEnvironment;
 
 /// Restore a PostgreSQL database dump to the target db, as defined by the `database_url`
 /// connection string.
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 pub fn restore_database(database_url: &str, dump_file: &PathBuf) -> anyhow::Result<()> {
-    // pg_restore --exit-on-error --clean --if-exists \
-    // --role penumbra --jobs "$(nproc)" --no-owner --no-acl \
-    // -d "$DB_WRANGLER_LOCAL_SRC_DB_URL" "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
-    tracing::warn!(?database_url, "beginning restore");
+    // Based on invocation from a dusty old bash script:
+    //
+    //   pg_restore --exit-on-error --clean --if-exists \
+    //   --role penumbra --jobs "$(nproc)" --no-owner --no-acl \
+    //   -d "$DB_WRANGLER_LOCAL_SRC_DB_URL" "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
+    let timer = Instant::now();
+    tracing::info!("restoring database dump to local postgres instance");
     let status = Command::new("pg_restore")
         .args([
             "--exit-on-error",
@@ -29,6 +34,9 @@ pub fn restore_database(database_url: &str, dump_file: &PathBuf) -> anyhow::Resu
                 .expect("failed to convert PathBuf to str"),
         ])
         .status()?;
+
+    let elapsed = timer.elapsed();
+    tracing::debug!(duration = %format_duration(elapsed), "finished local db restore");
     if status.success() {
         Ok(())
     } else {

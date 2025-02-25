@@ -7,6 +7,8 @@
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
   inputs.rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
 
+  # We declare two different versions of upstream `pindexer`
+  # deps, to enable handling different network environments differently.
   inputs.penumbra-repo-mainnet = {
     # url = "github:penumbra-zone/penumbra/v1.0.2";
     url = "github:penumbra-zone/penumbra/main";

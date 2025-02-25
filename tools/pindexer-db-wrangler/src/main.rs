@@ -141,7 +141,7 @@ async fn main() -> anyhow::Result<()> {
         //
         // tiny sleep: TODO we should instead check for the socket to be listening
         tracing::debug!("sleeping a bit to wait for pg to start");
-        let _foo = sleep(Duration::from_secs(2)).await;
+        let _foo = sleep(Duration::from_secs(5)).await;
 
         tracing::debug!("restoring cometbft dump to local db...");
         postgres::restore_database(&local_src_db_url, &cometbft_dump_file)

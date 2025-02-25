@@ -1,5 +1,5 @@
 //! Logic for parsing CLI options, and prompting interactively for input.
-use clap::Parser;
+use clap::{ColorChoice, Parser};
 use inquire::{MultiSelect, Select};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -15,7 +15,17 @@ pub const ACTION_REINDEX: &str = "reindex locally";
 pub const ACTION_RESTORE: &str = "restore to cloud";
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, color = ColorChoice::Always)]
+/// pindexer-db-wrangler is an admin utility to facilitate managing `pindexer`
+/// event databases for the Penumbra ecosystem.
+///
+/// It's intended to be a one-stop shop for common operations pertaining to lifecycle
+/// management of a Penumbra event database. In practice, this usually means
+/// "a new version of pindexer was released, and now I want to regenerate my pindexer
+/// database to take advantage of the latest schema." This tool can help with that.
+///
+/// By default, when invoked without any CLI args, the tool will prompt the user
+/// for interactive input about which environments should be managed.
 pub(crate) struct Cli {
     /// Which network to manage, "testnet" or "mainnet"
     // #[arg(long, value_parser = PenumbraEnvironment::from_str, default_value_t)]

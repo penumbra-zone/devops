@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.96"
 base64 = "0.22.1"
-clap = { version = "4.5.30", features = ["derive"] }
+clap = { version = "4.5.30", features = ["derive", "color"] }
 inquire = "0.7.5"
 k8s-openapi = { version = "0.24.0", features = ["v1_30"] }
 reqwest = { version = "0.12.12", features = ["stream", "rustls-tls-webpki-roots"] }
@@ -18,9 +18,10 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter", "ansi"] }
 url = "2.5.4"
 which = "7.0.2"
 
-# picturesque = { git = "https://github.com/penumbra-zone/penumbra", branch = "cronokirby/picturesque" }
-picturesque = { path = "/home/conor/src/pl/penumbra4/tools/picturesque" }
+picturesque = { git = "https://github.com/penumbra-zone/penumbra", branch = "conorsch/picturesque" }
+# picturesque = { path = "/home/conor/src/pl/penumbra4/tools/picturesque" }
 tempfile = "3.17.1"
 sqlx = { version = "0.8.3", features = ["postgres", "json", "runtime-tokio", "tls-rustls"] }
 postgres = "0.19.10"
 directories = "6.0.0"
+humantime = "2.1.0"

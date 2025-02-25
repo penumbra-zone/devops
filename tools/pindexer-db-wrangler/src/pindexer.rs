@@ -1,18 +1,21 @@
 use crate::postgres::{get_latest_cometbft_block_height, get_latest_pindexer_block_height};
 use crate::{download_file, PenumbraEnvironment};
+use humantime::format_duration;
 use std::process::Command;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::time::sleep;
 
 /// Run `pindexer`, as found on PATH, reading from one database and writing to another.
 /// We use full Strings for the db URLs, so that we can spawn background tasks to do
 /// progress reporting.
+#[tracing::instrument(skip(src_db_url, dest_db_url))]
 pub async fn run_pindexer(
     src_db_url: String,
     dest_db_url: String,
     penumbra_environment: &PenumbraEnvironment,
 ) -> anyhow::Result<()> {
-    // let genesis_file = tempfile::tempfile()?;
+    let timer = Instant::now();
     let genesis_url = penumbra_environment.genesis_url();
     let genesis_file = tempfile::Builder::new()
         .prefix("genesis-0")
@@ -61,5 +64,15 @@ pub async fn run_pindexer(
 
     // Explicitly drop the handle on the backgrounded reporting task
     drop(progress_handle);
+
+    let elapsed = timer.elapsed();
+    // e.g. "2s 123ms"
+    let duration = format_duration(elapsed);
+    let per_block = format_duration(elapsed / target_height as u32);
+    tracing::debug!(
+        duration = %duration,
+        per_block = %per_block,
+        "pindexer run finished"
+    );
     Ok(())
 }
