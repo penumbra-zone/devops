@@ -1,3 +1,6 @@
+use crate::postgres::dump_database;
+use crate::postgres::get_default_src_db_url;
+use crate::postgres::restore_database;
 use anyhow::Context;
 use clap::Parser;
 use std::fs::canonicalize;
@@ -18,7 +21,7 @@ mod pindexer;
 mod postgres;
 
 use crate::cli::Cli;
-use crate::cli::{ACTION_DUMP, ACTION_IMPORT, ACTION_REINDEX};
+use crate::cli::{ACTION_DUMP, ACTION_IMPORT, ACTION_REINDEX, ACTION_RESTORE};
 use pindexer_db_wrangler::config::default_home;
 use pindexer_db_wrangler::{download_file, PenumbraEnvironment};
 
@@ -96,14 +99,14 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("dumping src cometbft database to localhost");
                 match args.cometbft_src_database_url {
                     Some(db_url) => {
-                        postgres::dump_database(&db_url, &cometbft_dump_file)?;
+                        dump_database(&db_url, &cometbft_dump_file)?;
                     }
                     None => {
                         tracing::warn!(
                             "neither dump url nor db url were given; trying to load from k8s secrets"
                         );
-                        let src_db_url = postgres::get_default_src_db_url(&penumbra_environment)?;
-                        postgres::dump_database(&src_db_url, &cometbft_dump_file)?;
+                        let src_db_url = get_default_src_db_url(&penumbra_environment)?;
+                        dump_database(&src_db_url, &cometbft_dump_file)?;
                     }
                 }
                 tracing::info!("done dumping");
@@ -144,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
         let _foo = sleep(Duration::from_secs(5)).await;
 
         tracing::debug!("restoring cometbft dump to local db...");
-        postgres::restore_database(&local_src_db_url, &cometbft_dump_file)
+        restore_database(&local_src_db_url, &cometbft_dump_file)
             .context("failed to import cometbft db locally")?;
         tracing::info!("cometbft event database imported");
 
@@ -171,8 +174,32 @@ async fn main() -> anyhow::Result<()> {
             // tiny sleep: TODO we should instead check for the socket to be listening
             tracing::debug!("sleeping a bit to wait for pg to start");
             let _foo = sleep(Duration::from_secs(5)).await;
-            pindexer::run_pindexer(local_src_db_url, local_dst_db_url, &penumbra_environment)
-                .await?;
+            pindexer::run_pindexer(
+                local_src_db_url.clone(),
+                local_dst_db_url.clone(),
+                &penumbra_environment,
+            )
+            .await?;
+
+            // Upload the local copy of the pindexer db to target database.
+            if actions.contains(&ACTION_RESTORE.to_string()) {
+                let remote_pindexer_db_url = match args.pindexer_dst_database_url {
+                    Some(s) => s,
+                    // TODO: check for missing at arg-parsing stage
+                    None => anyhow::bail!(
+                        "'restore' action was requested, but no target database was declared"
+                    ),
+                };
+                // Filepath for saving the dumped database.
+                let pindexer_dump_file = project_dir.join("pindexer.dump");
+                // Dump local db to local file
+                tracing::info!("dumping local copy of pindexer db");
+                dump_database(&local_dst_db_url, &pindexer_dump_file)?;
+
+                // Write local pindexer dump to remote database
+                tracing::info!("restoring local pindexer dump to remote db");
+                restore_database(&remote_pindexer_db_url, &pindexer_dump_file)?;
+            }
         }
     }
 
@@ -184,6 +211,5 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tracing::info!("all actions complete!");
-
     Ok(())
 }

@@ -1029,6 +1029,7 @@ dependencies = [
 [[package]]
 name = "decaf377-fmd"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -1042,6 +1043,7 @@ dependencies = [
 [[package]]
 name = "decaf377-ka"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "ark-ff",
  "decaf377",
@@ -2939,6 +2941,7 @@ dependencies = [
 [[package]]
 name = "penumbra-sdk-asset"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "anyhow",
  "ark-ff",
@@ -2977,6 +2980,7 @@ dependencies = [
 [[package]]
 name = "penumbra-sdk-keys"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "aes",
  "anyhow",
@@ -3020,6 +3024,7 @@ dependencies = [
 [[package]]
 name = "penumbra-sdk-num"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "anyhow",
  "ark-ff",
@@ -3055,6 +3060,7 @@ dependencies = [
 [[package]]
 name = "penumbra-sdk-proto"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3081,6 +3087,7 @@ dependencies = [
 [[package]]
 name = "penumbra-sdk-tct"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "ark-ed-on-bls12-377",
  "ark-ff",
@@ -3143,6 +3150,7 @@ dependencies = [
 [[package]]
 name = "picturesque"
 version = "1.0.2"
+source = "git+https://github.com/penumbra-zone/penumbra?branch=conorsch%2Fpicturesque#76ea04e5dcec80b909af1f53d7a842df2643bd0b"
 dependencies = [
  "anyhow",
  "clap 3.2.25",

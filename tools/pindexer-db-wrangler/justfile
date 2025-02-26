@@ -1,5 +1,11 @@
 dev:
-  RUST_LOG=pindexer_db_wrangler=debug cargo run -- --cometbft-src-dump-url https://artifacts.plinfra.net/penumbra-testnet-phobos-2/cometbft-dbdump-height-2600860.dump --penumbra-environment testnet
+  RUST_LOG=pindexer_db_wrangler=debug cargo run -- \
+    --penumbra-environment testnet \
+    --cometbft-src-database-url "$pindexer_src_db" \
+    --pindexer-dst-database-url "$pindexer_dst_db"
 
 dev-mainnet:
-  RUST_LOG=pindexer_db_wrangler=debug cargo run -- --cometbft-src-dump-url https://artifacts.plinfra.net/penumbra-1/cometbft-dbdump-height-3640731.dump --penumbra-environment mainnet --working-directory foobar
+  RUST_LOG=pindexer_db_wrangler=debug cargo run -- \
+    --penumbra-environment mainnet \
+    --cometbft-src-database-url "$pindexer_src_db" \
+    --pindexer-dst-database-url "$pindexer_dst_db"

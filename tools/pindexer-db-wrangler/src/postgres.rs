@@ -16,7 +16,6 @@ pub fn restore_database(database_url: &str, dump_file: &PathBuf) -> anyhow::Resu
     //   --role penumbra --jobs "$(nproc)" --no-owner --no-acl \
     //   -d "$DB_WRANGLER_LOCAL_SRC_DB_URL" "$DB_WRANGLER_COMETBFT_DUMP_LOCAL_FILEPATH"
     let timer = Instant::now();
-    tracing::info!("restoring database dump to local postgres instance");
     let status = Command::new("pg_restore")
         .args([
             "--exit-on-error",
@@ -36,7 +35,7 @@ pub fn restore_database(database_url: &str, dump_file: &PathBuf) -> anyhow::Resu
         .status()?;
 
     let elapsed = timer.elapsed();
-    tracing::debug!(duration = %format_duration(elapsed), "finished local db restore");
+    tracing::debug!(duration = %format_duration(elapsed), "finished restoring db");
     if status.success() {
         Ok(())
     } else {
