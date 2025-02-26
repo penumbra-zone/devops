@@ -4,3 +4,7 @@
 .direnv/
 .env
 .envrc
+
+# working directories for active reindexing
+/mainnet-reindex-1
+/testnet-reindex-1

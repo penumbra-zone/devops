@@ -1,11 +1,19 @@
-dev:
+# Display available options
+help:
+  @just --list
+
+# Run the reindex against PL testnet
+testnet:
   RUST_LOG=pindexer_db_wrangler=debug cargo run -- \
     --penumbra-environment testnet \
-    --cometbft-src-database-url "$pindexer_src_db" \
-    --pindexer-dst-database-url "$pindexer_dst_db"
+    --working-directory testnet-reindex-1 \
+    --cometbft-src-database-url "$pindexer_src_db_testnet" \
+    --pindexer-dst-database-url "$pindexer_dst_db_testnet"
 
-dev-mainnet:
+# Run the reindex against mainnet
+mainnet:
   RUST_LOG=pindexer_db_wrangler=debug cargo run -- \
     --penumbra-environment mainnet \
-    --cometbft-src-database-url "$pindexer_src_db" \
-    --pindexer-dst-database-url "$pindexer_dst_db"
+    --working-directory mainnet-reindex-1 \
+    --cometbft-src-database-url "$pindexer_src_db_mainnet" \
+    --pindexer-dst-database-url "$pindexer_dst_db_mainnet"
