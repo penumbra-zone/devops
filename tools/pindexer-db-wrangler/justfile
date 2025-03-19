@@ -2,8 +2,13 @@
 help:
   @just --list
 
+# Lint the rust code
+check:
+  cargo check --all-features --all-targets
+
 # Run the reindex against PL testnet
 testnet:
+  rm -rf testnet-reindex-1
   RUST_LOG=pindexer_db_wrangler=debug cargo run -- \
     --penumbra-environment testnet \
     --working-directory testnet-reindex-1 \
@@ -12,6 +17,7 @@ testnet:
 
 # Run the reindex against mainnet
 mainnet:
+  rm -rf mainnet-reindex-1
   RUST_LOG=pindexer_db_wrangler=debug cargo run -- \
     --penumbra-environment mainnet \
     --working-directory mainnet-reindex-1 \
