@@ -321,7 +321,6 @@ impl PenumbraNetwork {
                 resources: Some(VolumeResourceRequirements {
                     requests: Some(BTreeMap::<String, Quantity>::from([(
                         "storage".to_owned(),
-                        // Quantity(crate::crd::resources::DEFAULT_PVC_SIZE.to_owned()),
                         // We don't need much space for initial configs.
                         Quantity("100M".to_owned()),
                     )])),

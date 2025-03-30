@@ -34,6 +34,7 @@ use kube::{
 };
 use std::collections::BTreeMap;
 
+use crate::crd::resources::DEFAULT_PVC_SIZE;
 use crate::crd::resources::PD_NODE_STATE_PVC_NAME;
 use crate::error::Result;
 use crate::PENUMBRA_IMAGE_REPO;
@@ -105,6 +106,10 @@ pub struct PenumbraNodeSpec {
     /// to help with selection. Defaults to 'FullNode'.
     #[serde(default)]
     pub node_type: NodeType,
+
+    /// Amount of storage to provision for the node.
+    #[serde(default = "default_pvc_size")]
+    pub pvc_size: String,
 }
 
 // Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
@@ -115,6 +120,11 @@ fn default_image_tag() -> String {
 // Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
 fn default_image_repo() -> String {
     PENUMBRA_IMAGE_REPO.to_owned()
+}
+
+// Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
+fn default_pvc_size() -> String {
+    DEFAULT_PVC_SIZE.to_owned()
 }
 
 impl Default for PenumbraNodeSpec {
@@ -131,6 +141,7 @@ impl Default for PenumbraNodeSpec {
             publish_not_ready_addresses: false,
             seeds: None,
             node_type: NodeType::FullNode,
+            pvc_size: DEFAULT_PVC_SIZE.to_owned(),
         }
     }
 }
@@ -414,7 +425,7 @@ impl PenumbraNode {
                 resources: Some(VolumeResourceRequirements {
                     requests: Some(BTreeMap::<String, Quantity>::from([(
                         "storage".to_owned(),
-                        Quantity(crate::crd::resources::DEFAULT_PVC_SIZE.to_owned()),
+                        Quantity(self.spec.pvc_size.clone()),
                     )])),
                     ..Default::default()
                 }),
