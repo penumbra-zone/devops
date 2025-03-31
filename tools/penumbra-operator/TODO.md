@@ -37,7 +37,7 @@ Then we can auto-default everything else. That means resources to deploy would b
   - [x] deploy statefulset as defined via rust code
   - [x] support archive urls for historical data
   - [x] make sure configmaps are updated on the fly
-  - [ ] implement cleanup of resources
+  - [x] implement cleanup of resources
   - [x] statefulset deletion
   - [x] service deletion
   - [ ] pvc deletion
@@ -45,6 +45,9 @@ Then we can auto-default everything else. That means resources to deploy would b
   - [ ] p2p lb
   - [ ] annotate with chain id
   - [ ] annotate with latest block height
+  - [x] add readinessprobe
+  - [ ] add livenessprobe
+  - [ ] add "pause"/maintenanceMode
 - [x] add containerfile
 - [ ] shared pvc for archive urls
 - [ ] add support for creating networks

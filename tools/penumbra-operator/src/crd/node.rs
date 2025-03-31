@@ -17,7 +17,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use k8s_openapi::api::core::v1::{
-    ConfigMap, ConfigMapVolumeSource, Container, ContainerPort, EnvVar, KeyToPath,
+    ConfigMap, ConfigMapVolumeSource, Container, ContainerPort, EnvVar, ExecAction, KeyToPath,
     PersistentVolumeClaim, PersistentVolumeClaimSpec, PersistentVolumeClaimVolumeSource, Pod,
     PodSpec, Probe, SecurityContext, Service, ServicePort, ServiceSpec, TCPSocketAction, Volume,
     VolumeMount, VolumeResourceRequirements,
@@ -66,23 +66,29 @@ pub(crate) const CMT_SCHEMA_CONFIG_MAP_NAME: &str = "penumbra-cometbft-postgres-
 pub struct PenumbraNodeSpec {
     /// Human-readable name for node.
     pub moniker: String,
+
     /// Human-readable name for the network, as an arbitrary label,
     /// e.g. "penumbra-preview", rather than a chain-id.
     /// This value is used solely to distinguish the k8s resources,
     /// marking them explicitly as part of a greater whole.
     pub network_name: Option<String>,
+
     /// Container image spec, without tag suffix.
     #[serde(default = "default_image_repo")]
     pub image_repo: String,
+
     /// Container image tag to fetch from remote `image_repo`.
     #[serde(default = "default_image_tag")]
     pub image_tag: String,
+
     /// Public RPC endpoint for an already-existing remote node,
     /// to fetch information about the network. If `None`,
     /// the init script will not touch local state before starting services.
     pub bootstrap_url: Option<String>,
+
     /// Remote URL to fetch a state archive, for extracting pre-upgrade blocks.
     pub archive_url: Option<String>,
+
     /// Whether to enable ABCI event indexing via CometBFT to a PostgreSQL database.
     #[serde(default)]
     pub enable_indexing: bool,
@@ -110,6 +116,11 @@ pub struct PenumbraNodeSpec {
     /// Amount of storage to provision for the node.
     #[serde(default = "default_pvc_size")]
     pub pvc_size: String,
+
+    /// Whether to wait for CometBFT to report `catching_up=False`
+    /// before marking the node as Ready to back services.
+    #[serde(default = "default_wait_for_catchup")]
+    pub wait_for_catchup: bool,
 }
 
 // Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
@@ -127,6 +138,11 @@ fn default_pvc_size() -> String {
     DEFAULT_PVC_SIZE.to_owned()
 }
 
+// Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
+fn default_wait_for_catchup() -> bool {
+    true
+}
+
 impl Default for PenumbraNodeSpec {
     fn default() -> Self {
         Self {
@@ -142,6 +158,7 @@ impl Default for PenumbraNodeSpec {
             seeds: None,
             node_type: NodeType::FullNode,
             pvc_size: DEFAULT_PVC_SIZE.to_owned(),
+            wait_for_catchup: default_wait_for_catchup(),
         }
     }
 }
@@ -662,13 +679,32 @@ impl PenumbraNode {
                     ..Default::default()
                 },
             ]),
-            readiness_probe: Some(Probe {
-                tcp_socket: Some(TCPSocketAction {
-                    port: IntOrString::String("cmt-rpc".to_owned()),
+            readiness_probe: if self.spec.wait_for_catchup {
+                Some(Probe {
+                    exec: Some(ExecAction {
+                        command: Some(vec![
+                            "sh".to_owned(),
+                            "-cex".to_owned(),
+                            r#"catching_up="$(curl -s http://localhost:26657/status | jq -r .result.sync_info.catching_up)" ;
+                               test "$catching_up" = "false"
+                            "#.to_owned(),
+                        ]),
+                    }),
+                    initial_delay_seconds: Some(10),
+                    period_seconds: Some(30),
+                    success_threshold: Some(1),
+                    failure_threshold: Some(1),
                     ..Default::default()
-                }),
-                ..Default::default()
-            }),
+                })
+            } else {
+                Some(Probe {
+                    tcp_socket: Some(TCPSocketAction {
+                        port: IntOrString::String("cmt-rpc".to_owned()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })
+            },
             security_context: Some(SecurityContext {
                 run_as_user: Some(100),
                 ..Default::default()
