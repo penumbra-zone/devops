@@ -151,6 +151,11 @@ fn default_wait_for_catchup() -> bool {
     true
 }
 
+// Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
+fn default_enable_indexing() -> bool {
+    true
+}
+
 impl Default for PenumbraNodeSpec {
     fn default() -> Self {
         Self {
@@ -160,7 +165,7 @@ impl Default for PenumbraNodeSpec {
             bootstrap_url: Some(DEFAULT_BOOTSTRAP_URL.to_owned()),
             archive_url: None,
             network_name: None,
-            enable_indexing: false,
+            enable_indexing: default_enable_indexing(),
             node_state_pvc_name: None,
             publish_not_ready_addresses: false,
             seeds: None,
@@ -932,25 +937,50 @@ impl PenumbraNode {
             .as_ref()
             .expect("namespace is required");
 
-        // We need a ConfigMap in order for the initContainer to run.
-        let cm = self.pd_init_script_configmap();
+        // Grab ConfigMap API for creating ConfigMaps.
         let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
-        // In lieu of a `get-or-create` method in the kube API, we'll match on a get() call,
-        // and create if not found.
-        let cm_name = cm
+
+        // We need a ConfigMap in order for the initContainer to run.
+        let pd_init_cm = self.pd_init_script_configmap();
+        let pd_init_cm_name = pd_init_cm
             .clone()
             .metadata
             .name
             .expect("pd init script must have name");
-        match cm_api.get(&cm_name).await {
+        // In lieu of a `get-or-create` method in the kube API, we'll match on a get() call,
+        // and create if not found.
+        match cm_api.get(&pd_init_cm_name).await {
             Ok(_) => {
-                let patch = Patch::Merge(&cm);
+                let patch = Patch::Merge(&pd_init_cm);
                 let params = PatchParams::default();
-                cm_api.patch(&cm_name, &params, &patch).await?;
+                cm_api.patch(&pd_init_cm_name, &params, &patch).await?;
             }
             Err(_e) => {
-                tracing::info!("creating {:?}", &cm);
-                cm_api.create(&PostParams::default(), &cm).await?;
+                tracing::info!("creating {:?}", &pd_init_cm);
+                cm_api.create(&PostParams::default(), &pd_init_cm).await?;
+            }
+        }
+
+        // We need a ConfigMap to load the CometBFT PostgreSQL schema.
+        let cmt_pg_schema_cm = self.postgres_schema_configmap();
+        let cmt_pg_schema_cm_name = cmt_pg_schema_cm
+            .clone()
+            .metadata
+            .name
+            .expect("pg schema configmap must have name");
+        match cm_api.get(&cmt_pg_schema_cm_name).await {
+            Ok(_) => {
+                let patch = Patch::Merge(&cmt_pg_schema_cm);
+                let params = PatchParams::default();
+                cm_api
+                    .patch(&cmt_pg_schema_cm_name, &params, &patch)
+                    .await?;
+            }
+            Err(_e) => {
+                tracing::info!("creating ConfigMap<{}>", &cmt_pg_schema_cm_name);
+                cm_api
+                    .create(&PostParams::default(), &cmt_pg_schema_cm)
+                    .await?;
             }
         }
 
@@ -1055,10 +1085,7 @@ impl PenumbraNode {
     pub fn postgres_schema_configmap(&self) -> ConfigMap {
         ConfigMap {
             metadata: ObjectMeta {
-                name: Some(format!(
-                    "{}-{CMT_SCHEMA_CONFIG_MAP_NAME}",
-                    self.release_name()
-                )),
+                name: Some(CMT_SCHEMA_CONFIG_MAP_NAME.to_owned()),
                 labels: Some(crate::crd::resources::labels()),
                 owner_references: Some(vec![self.oref()]),
                 ..Default::default()

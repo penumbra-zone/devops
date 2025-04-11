@@ -36,6 +36,7 @@ Then we can auto-default everything else. That means resources to deploy would b
 - [ ] add support for creating nodes
   - [x] deploy statefulset as defined via rust code
   - [x] support archive urls for historical data
+  - [ ] clean up already downloaded archive
   - [x] make sure configmaps are updated on the fly
   - [x] implement cleanup of resources
   - [x] statefulset deletion
@@ -48,6 +49,15 @@ Then we can auto-default everything else. That means resources to deploy would b
   - [x] add readinessprobe
   - [ ] add livenessprobe
   - [x] add "pause"/maintenanceMode
+- [ ] add support for indexing
+  - [x] create pg container
+  - [x] create pg db
+  - [x] create pg username
+  - [x] apply pg schema
+  - [x] configure cometbft pg indexer
+  - [x] unconfigure cometbft pg indexer
+  - [x] confirm actual blocks landing in db
+  - [ ] use consolidated pvc for db data
 - [x] add containerfile
 - [ ] shared pvc for archive urls
 - [ ] add support for creating networks
