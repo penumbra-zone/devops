@@ -121,6 +121,14 @@ pub struct PenumbraNodeSpec {
     /// before marking the node as Ready to back services.
     #[serde(default = "default_wait_for_catchup")]
     pub wait_for_catchup: bool,
+
+    /// Whether to pause the node by running 'sleep infinity'
+    /// in all pods, enabling an admin to interact with storage,
+    /// e.g. to perform migrations. Will pause both the pd and cometbft
+    /// containers, but not the postgres container, so the database is still available
+    /// for dumping or restoring.
+    #[serde(default)]
+    pub maintenance_mode: bool,
 }
 
 // Custom function to return a default value for the `#[serde(default)]` annotation on the struct.
@@ -159,6 +167,7 @@ impl Default for PenumbraNodeSpec {
             node_type: NodeType::FullNode,
             pvc_size: DEFAULT_PVC_SIZE.to_owned(),
             wait_for_catchup: default_wait_for_catchup(),
+            maintenance_mode: false,
         }
     }
 }
@@ -262,7 +271,11 @@ impl PenumbraNode {
                 ..Default::default()
             },
             spec: Some(PodSpec {
-                init_containers: Some(vec![self.pd_init_container()]),
+                init_containers: if self.spec.maintenance_mode {
+                    None
+                } else {
+                    Some(vec![self.pd_init_container()])
+                },
                 containers,
                 volumes: Some(self.volumes()),
                 // Set restartPolicy for the Pod to be Never, so a crashed node stays down.
@@ -273,6 +286,15 @@ impl PenumbraNode {
             }),
             ..Default::default()
         }
+    }
+
+    /// Container command to "pause" an instance, serving its storage
+    /// without a runtime, so that an admin can program it.
+    pub fn container_pause_cmd(&self) -> Vec<String> {
+        vec!["sleep", "infinity"]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
     }
 
     /// Expose bash script for pd-init as ConfigMap, so it's volume-mountable.
@@ -546,25 +568,35 @@ impl PenumbraNode {
                 self.spec.image_repo.clone(),
                 self.spec.image_tag.clone()
             )),
-            command: Some(
-                // TODO convert these options to env vars,
-                // to make them more easily overrideable.
-                vec![
-                    "pd",
-                    "start",
-                    "--grpc-bind",
-                    "0.0.0.0:8080",
-                    "--metrics-bind",
-                    "0.0.0.0:9000",
-                    "--enable-expensive-rpc",
-                ]
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect(),
-            ),
+            command: if self.spec.maintenance_mode {
+                Some(self.container_pause_cmd())
+            } else {
+                Some(
+                    // TODO convert these options to env vars,
+                    // to make them more easily overrideable.
+                    vec![
+                        "pd",
+                        "start",
+                        "--grpc-bind",
+                        "0.0.0.0:8080",
+                        "--metrics-bind",
+                        "0.0.0.0:9000",
+                        "--enable-expensive-rpc",
+                    ]
+                    .into_iter()
+                    .map(|x| x.to_owned())
+                    .collect(),
+                )
+            },
             env: Some(self.pd_env()),
             security_context: Some(SecurityContext {
-                run_as_user: Some(1000),
+                // Run as root if maintenance mode is enabled, otherwise as 1000,
+                // which matches the default UID in the container image.
+                run_as_user: if self.spec.maintenance_mode {
+                    Some(0)
+                } else {
+                    Some(1000)
+                },
                 ..Default::default()
             }),
             ports: Some(vec![
@@ -656,12 +688,16 @@ impl PenumbraNode {
                 crate::COMETBFT_IMAGE_REPO,
                 crate::COMETBFT_IMAGE_TAG
             )),
-            command: Some(
-                vec!["cometbft", "start", "--proxy_app=tcp://127.0.0.1:26658"]
-                    .into_iter()
-                    .map(|x| x.to_owned())
-                    .collect(),
-            ),
+            command: if self.spec.maintenance_mode {
+                Some(self.container_pause_cmd())
+            } else {
+                Some(
+                    vec!["cometbft", "start", "--proxy_app=tcp://127.0.0.1:26658"]
+                        .into_iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                )
+            },
             ports: Some(vec![
                 ContainerPort {
                     name: Some("cmt-p2p".to_owned()),

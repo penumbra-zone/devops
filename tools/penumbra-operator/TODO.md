@@ -47,7 +47,7 @@ Then we can auto-default everything else. That means resources to deploy would b
   - [ ] annotate with latest block height
   - [x] add readinessprobe
   - [ ] add livenessprobe
-  - [ ] add "pause"/maintenanceMode
+  - [x] add "pause"/maintenanceMode
 - [x] add containerfile
 - [ ] shared pvc for archive urls
 - [ ] add support for creating networks
