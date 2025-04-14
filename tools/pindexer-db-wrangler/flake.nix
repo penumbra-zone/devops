@@ -16,7 +16,7 @@
   };
 
   inputs.penumbra-repo-testnet = {
-    url = "github:penumbra-zone/penumbra/v2.0.0-alpha.6";
+    url = "github:penumbra-zone/penumbra/v2.0.0-alpha.8";
     # Reuse the nixpkgs from the current devshell.
     inputs.nixpkgs.follows = "nixpkgs"; # Use your nixpkgs
   };
