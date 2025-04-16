@@ -1,6 +1,6 @@
 [package]
 name = "penumbra-operator"
-version = "0.2.6-alpha.1"
+version = "0.2.6"
 edition = "2021"
 default-run = "penumbra-operator"
 
