@@ -16,6 +16,7 @@
           name = "penumbra-operator devShell";
           nativeBuildInputs = [ pkgs.bashInteractive ];
           buildInputs = with pkgs; [
+            cargo-release
             doctl
             fd
             file
