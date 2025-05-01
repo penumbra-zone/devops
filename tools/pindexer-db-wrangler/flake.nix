@@ -10,13 +10,13 @@
   # We declare two different versions of upstream `pindexer`
   # deps, to enable handling different network environments differently.
   inputs.penumbra-repo-mainnet = {
-    url = "github:penumbra-zone/penumbra/v1.4.0";
+    url = "github:penumbra-zone/penumbra/v1.5.1";
     # Reuse the nixpkgs from the current devshell.
     inputs.nixpkgs.follows = "nixpkgs"; # Use your nixpkgs
   };
 
   inputs.penumbra-repo-testnet = {
-    url = "github:penumbra-zone/penumbra/v2.0.0-alpha.8";
+    url = "github:penumbra-zone/penumbra/v2.0.0-alpha.10";
     # Reuse the nixpkgs from the current devshell.
     inputs.nixpkgs.follows = "nixpkgs"; # Use your nixpkgs
   };
