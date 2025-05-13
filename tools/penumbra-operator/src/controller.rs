@@ -20,8 +20,7 @@ pub const PENUMBRA_NODE_FINALIZER: &str = "penumbranodes.penumbra.zone";
 pub const PENUMBRA_NETWORK_FINALIZER: &str = "penumbranetworks.penumbra.zone";
 
 /// How many seconds to wait after an error to retry the reconcile action.
-const REQUEUE_DELAY_SECONDS: u64 = 60;
-// const REQUEUE_DELAY_SECONDS: u64 = 5;
+const REQUEUE_DELAY_ON_ERROR_SECONDS: u64 = 10;
 
 /// Ensures that the relevant CRDs for the operator are recognized
 /// by the cluster. Idempotent, so it's OK to run this command multiple times.
@@ -97,14 +96,14 @@ async fn reconcile_penumbra_network(
 fn error_policy_penumbra_node(n: Arc<PenumbraNode>, e: &Error, _ctx: Arc<Context>) -> Action {
     tracing::error!(?n, ?e, "encountered error while reconciling, requeuing");
     // tracing::error!("encountered error while reconciling {}, requeuing", n);
-    Action::requeue(Duration::from_secs(REQUEUE_DELAY_SECONDS))
+    Action::requeue(Duration::from_secs(REQUEUE_DELAY_ON_ERROR_SECONDS))
 }
 
 /// Custom error handler for reconciliation loop. Logs error, requeues object.
 fn error_policy_penumbra_network(n: Arc<PenumbraNetwork>, e: &Error, _ctx: Arc<Context>) -> Action {
     tracing::error!(?n, ?e, "encountered error while reconciling, requeuing");
     // tracing::error!("encountered error while reconciling {}, requeuing", n);
-    Action::requeue(Duration::from_secs(REQUEUE_DELAY_SECONDS))
+    Action::requeue(Duration::from_secs(REQUEUE_DELAY_ON_ERROR_SECONDS))
 }
 
 /// Main controller loop. Manages two separate [Controller]s,

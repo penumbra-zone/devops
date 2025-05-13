@@ -46,6 +46,9 @@ const DEFAULT_BOOTSTRAP_URL: &str = "https://rpc.testnet-preview.plinfra.net";
 /// How many seconds to wait after an error to retry the reconcile action.
 const REQUEUE_DELAY_SECONDS: u64 = 30;
 
+/// How long, in seconds, to wait for a deletion when recreating a resource, e.g. a Pod.
+const TIMEOUT_DELETION_SECONDS: u64 = 90;
+
 pub(crate) const PD_INIT_SCRIPT_NAME: &str = "pd-init";
 pub(crate) const CMT_SCHEMA_CONFIG_MAP_NAME: &str = "penumbra-cometbft-postgres-schema";
 
@@ -909,8 +912,8 @@ impl PenumbraNode {
 
         api.delete(name, &dp).await?;
 
-        // Simple poll loop with timeout
-        let timeout = Duration::from_secs(30);
+        // Simple poll loop with timeout.
+        let timeout = Duration::from_secs(TIMEOUT_DELETION_SECONDS);
         let start = std::time::Instant::now();
 
         while start.elapsed() < timeout {
