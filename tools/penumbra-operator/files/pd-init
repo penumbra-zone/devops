@@ -46,7 +46,7 @@ if [[ -n "${PENUMBRA_BOOTSTRAP_URL:-}" ]] ; then
         sed -i -e "/^psql-conn/d ; s#^indexer.*#indexer = \"psql\"\\npsql-conn = \"$COMETBFT_POSTGRES_CONNECTION_URL\"#" \
             "${penumbra_network_dir}/node0/cometbft/config/config.toml"
     else
-        >&2 echo "INFO: Skipping configuration of  CometBFT event indexing";
+        >&2 echo "INFO: Skipping configuration of CometBFT event indexing";
         # Disable indexing, in case spec changed from enable_indexing=false -> true.
         sed -i -e "/^psql-conn/d ; s#^indexer.*#indexer = \"kv\"#" \
             "${penumbra_network_dir}/node0/cometbft/config/config.toml"
@@ -59,7 +59,7 @@ if [[ -n "${PENUMBRA_BOOTSTRAP_URL:-}" ]] ; then
     fi
 
 else
-    >&2 echo "No bootstrap URL set, not touching local state"
+    >&2 echo "INFO: No bootstrap URL set, not touching local state"
     set +e
     find "$penumbra_network_dir"
     ls -lR "$penumbra_network_dir"
@@ -69,9 +69,22 @@ else
     exit 0
 fi
 
-
+>&2 echo "INFO: Setting volume ownership and permissions"
 # set ownership for pd user
 chown -R 1000:1000 "$penumbra_network_dir/node0"
 
 # set ownership for cometbft configs to match cometbft container "tmuser" uid/gid
 chown -R 100:1000 "${penumbra_network_dir}/node0/cometbft"
+
+# Create a postgresql subdir for storing database.
+if [[ "${PENUMBRA_COMETBFT_INDEXER:-}" = "psql" ]] ; then
+  >&2 echo "DEBUG: Configuring postgres perms"
+  pg_dir="${penumbra_network_dir}/node0/postgresql"
+  mkdir -p "$pg_dir"
+  chmod 0750 "$pg_dir"
+  # Set appropriate perms for the upstream postgres container, where user "postgres"
+  # has uid and gid 999.
+  chown -R 999:999 "$pg_dir"
+fi
+
+>&2 echo "INFO: Finished pd-init"

@@ -452,7 +452,7 @@ impl PenumbraNode {
 
     /// Create [PersistentVolumeClaim]s for StatefulSet spec.
     pub fn pvcs(&self) -> Vec<PersistentVolumeClaim> {
-        let mut claims = vec![PersistentVolumeClaim {
+        vec![PersistentVolumeClaim {
             // PVC for storing node state, for all applications.
             metadata: ObjectMeta {
                 // name: Some(crate::crd::resources::PD_NODE_STATE_PVC_NAME.to_owned()),
@@ -479,35 +479,7 @@ impl PenumbraNode {
                 ..Default::default()
             }),
             ..Default::default()
-        }];
-        // TODO: ditch separate PVC for db, just submount into primary setup
-        if self.spec.enable_indexing {
-            claims.push(PersistentVolumeClaim {
-                metadata: ObjectMeta {
-                    name: Some(format!(
-                        "{}-{}",
-                        self.release_name(),
-                        crate::crd::resources::DB_PVC_NAME.to_owned()
-                    )),
-                    labels: Some(self.labels()),
-                    owner_references: Some(vec![self.oref()]),
-                    ..Default::default()
-                },
-                spec: Some(PersistentVolumeClaimSpec {
-                    access_modes: Some(vec!["ReadWriteOnce".to_owned()]),
-                    resources: Some(VolumeResourceRequirements {
-                        requests: Some(BTreeMap::<String, Quantity>::from([(
-                            "storage".to_owned(),
-                            Quantity("1G".to_owned()),
-                        )])),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            });
-        }
-        claims
+        }]
     }
 
     /// Generate environment variables for pd container, particularly the initContainer.
@@ -553,7 +525,6 @@ impl PenumbraNode {
                 value: Some("psql".to_string()),
                 ..Default::default()
             });
-            // TODO: disable psql indexer if indexing disabled.
             env.push(EnvVar {
                 name: "COMETBFT_POSTGRES_CONNECTION_URL".to_string(),
                 value: Some(
@@ -679,7 +650,6 @@ impl PenumbraNode {
                         self.release_name(),
                         PD_NODE_STATE_PVC_NAME.to_owned()
                     ),
-                    // name: PD_NODE_STATE_PVC_NAME.to_owned(),
                     mount_path: "/home/penumbra/.penumbra/".to_owned(),
                     ..Default::default()
                 },
@@ -779,6 +749,14 @@ impl PenumbraNode {
                 crate::POSTGRES_IMAGE_REPO,
                 crate::POSTGRES_IMAGE_TAG
             )),
+
+            // TODO: support maintenance_mode where db still runs
+            command: if self.spec.maintenance_mode {
+                Some(self.container_pause_cmd())
+            } else {
+                None
+            },
+
             // TODO support ssl args
             ports: Some(vec![ContainerPort {
                 name: Some(container_name),
@@ -802,6 +780,11 @@ impl PenumbraNode {
                     value: Some("penumbra".to_string()),
                     ..Default::default()
                 },
+                EnvVar {
+                    name: "PGDATA".to_string(),
+                    value: Some("/var/lib/postgresql/data/pgdata".to_string()),
+                    ..Default::default()
+                },
             ]),
             readiness_probe: Some(Probe {
                 tcp_socket: Some(TCPSocketAction {
@@ -821,9 +804,10 @@ impl PenumbraNode {
                     name: format!(
                         "{}-{}",
                         self.release_name(),
-                        crate::crd::resources::DB_PVC_NAME.to_owned()
+                        crate::crd::resources::PD_NODE_STATE_PVC_NAME.to_owned()
                     ),
-                    mount_path: "/var/lib/postgresql".to_owned(),
+                    mount_path: "/var/lib/postgresql/data".to_owned(),
+                    sub_path: Some("network_data/node0/postgresql".to_owned()),
                     ..Default::default()
                 },
             ]),

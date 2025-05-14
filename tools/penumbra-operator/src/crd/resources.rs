@@ -2,7 +2,6 @@
 //! from the CRD spec's configuration.
 use std::collections::BTreeMap;
 
-pub(crate) const DB_PVC_NAME: &str = "penumbra-db";
 pub(crate) const PD_NODE_STATE_PVC_NAME: &str = "penumbra-config";
 
 // Total size for PVC for node, including pd & cometbft state.

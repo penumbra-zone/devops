@@ -22,7 +22,7 @@ pub const COMETBFT_IMAGE_TAG: &str = "v0.37.15";
 /// The container image repository for Postgres images.
 pub const POSTGRES_IMAGE_REPO: &str = "docker.io/library/postgres";
 /// The container tag used for Postgres images.
-pub const POSTGRES_IMAGE_TAG: &str = "latest";
+pub const POSTGRES_IMAGE_TAG: &str = "16";
 
 pub const PENUMBRA_FINALIZER: &str = "latest";
 

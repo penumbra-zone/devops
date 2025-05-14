@@ -57,7 +57,12 @@ Then we can auto-default everything else. That means resources to deploy would b
   - [x] configure cometbft pg indexer
   - [x] unconfigure cometbft pg indexer
   - [x] confirm actual blocks landing in db
-  - [ ] use consolidated pvc for db data
+  - [x] use consolidated pvc for db data
+- [ ] add support for reindexing
+  - [ ] add reindexer-archive container
+  - [ ] auto-fetch reindexer archive via init
+  - [ ] auto-follow the old blocks
+  - [ ] add reindexer-regen container
 - [x] add containerfile
 - [ ] shared pvc for archive urls
 - [ ] add support for creating networks
