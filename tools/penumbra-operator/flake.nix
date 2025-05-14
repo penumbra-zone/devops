@@ -38,12 +38,11 @@
             yamllint
             yq
           ];
+          shellHook = ''
+            if [[ -z "$KUBECONFIG" ]] && [[ ! -e "$HOME/.kube/config" ]]; then
+              gum log --level=warn "No KUBECONFIG set; consider adding one in .envrc"
+            fi
+          '';
         };
-        # Don't automatically source the env, which requires an `age` privkey
-        # to load secrets. Might not be available in CI, and we still want to
-        # access the nix env via `nix develop`.
-        # shellHook = ''
-        #   source ./tools/env.sh
-        # '';
       });
 }

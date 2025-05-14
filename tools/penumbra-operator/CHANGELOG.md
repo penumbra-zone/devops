@@ -1,6 +1,11 @@
 # Unreleased
 
+<!--
 Nothing Yet!
+-->
+
+* refine deletion and requeue timeouts
+* refine kubeconfig handling in dev env
 
 # Version 0.2.6 (2025-04-15)
 
