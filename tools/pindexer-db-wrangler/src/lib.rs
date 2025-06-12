@@ -16,9 +16,9 @@ pub mod postgres;
 #[derive(Debug, Default, Clone)]
 pub enum PenumbraEnvironment {
     #[default]
-    /// The PL-run public testnet, identified by chain-id `penumbra-testnet-phobos-2`.
+    /// The PL-run public testnet, identified by chain-id `penumbra-testnet-phobos-3`.
     Testnet,
-    /// The primary public network, identified by chain-id `penumbra-testnet-phobos-2`.
+    /// The primary public network, identified by chain-id `penumbra-1`.
     Mainnet,
 }
 
@@ -26,7 +26,7 @@ impl PenumbraEnvironment {
     pub fn genesis_url(&self) -> Url {
         match self {
             PenumbraEnvironment::Testnet => {
-                Url::parse("https://artifacts.plinfra.net/penumbra-testnet-phobos-2/genesis-0.json")
+                Url::parse("https://artifacts.plinfra.net/penumbra-testnet-phobos-3/genesis-0.json")
                     .unwrap()
             }
             PenumbraEnvironment::Mainnet => {
