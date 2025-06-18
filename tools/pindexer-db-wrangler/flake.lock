@@ -110,16 +110,16 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1749844784,
-        "narHash": "sha256-HqlWVruccQPFylWH2hZzoufCuDc6p/kdczq9yJ4cdeE=",
+        "lastModified": 1750265873,
+        "narHash": "sha256-CfrL4ESjeSXjtR2teAT6WV/3Ozs3JNJoqBRvRrKdEE4=",
         "owner": "penumbra-zone",
         "repo": "penumbra",
-        "rev": "f0d75958d44c9e946102731e3ace3ac51f5cccc8",
+        "rev": "edb3d5f2cb1335880ae6ecdc10192f48d62edd16",
         "type": "github"
       },
       "original": {
         "owner": "penumbra-zone",
-        "ref": "v2.0.0",
+        "ref": "v2.0.1",
         "repo": "penumbra",
         "type": "github"
       }
@@ -134,16 +134,16 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1749844784,
-        "narHash": "sha256-HqlWVruccQPFylWH2hZzoufCuDc6p/kdczq9yJ4cdeE=",
+        "lastModified": 1750265873,
+        "narHash": "sha256-CfrL4ESjeSXjtR2teAT6WV/3Ozs3JNJoqBRvRrKdEE4=",
         "owner": "penumbra-zone",
         "repo": "penumbra",
-        "rev": "f0d75958d44c9e946102731e3ace3ac51f5cccc8",
+        "rev": "edb3d5f2cb1335880ae6ecdc10192f48d62edd16",
         "type": "github"
       },
       "original": {
         "owner": "penumbra-zone",
-        "ref": "v2.0.0",
+        "ref": "v2.0.1",
         "repo": "penumbra",
         "type": "github"
       }
