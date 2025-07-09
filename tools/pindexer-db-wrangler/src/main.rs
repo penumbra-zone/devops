@@ -181,6 +181,12 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
 
+            // Filepath for saving the dumped database.
+            let pindexer_dump_file = project_dir.join("pindexer.dump");
+            // Dump local db to local file
+            tracing::info!("dumping local copy of pindexer db");
+            dump_database(&local_dst_db_url, &pindexer_dump_file)?;
+
             // Upload the local copy of the pindexer db to target database.
             if actions.contains(&ACTION_RESTORE.to_string()) {
                 let remote_pindexer_db_url = match args.pindexer_dst_database_url {
@@ -190,11 +196,6 @@ async fn main() -> anyhow::Result<()> {
                         "'restore' action was requested, but no target database was declared"
                     ),
                 };
-                // Filepath for saving the dumped database.
-                let pindexer_dump_file = project_dir.join("pindexer.dump");
-                // Dump local db to local file
-                tracing::info!("dumping local copy of pindexer db");
-                dump_database(&local_dst_db_url, &pindexer_dump_file)?;
 
                 // Write local pindexer dump to remote database
                 tracing::info!("restoring local pindexer dump to remote db");
