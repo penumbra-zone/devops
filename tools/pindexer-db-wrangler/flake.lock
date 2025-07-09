@@ -2,11 +2,11 @@
   "nodes": {
     "crane": {
       "locked": {
-        "lastModified": 1734808813,
-        "narHash": "sha256-3aH/0Y6ajIlfy7j52FGZ+s4icVX0oHhqBzRdlOeztqg=",
+        "lastModified": 1742394900,
+        "narHash": "sha256-vVOAp9ahvnU+fQoKd4SEXB2JG2wbENkpqcwlkIXgUC0=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "72e2d02dbac80c8c86bf6bf3e785536acf8ee926",
+        "rev": "70947c1908108c0c551ddfd73d4f750ff2ea67cd",
         "type": "github"
       },
       "original": {
@@ -17,11 +17,11 @@
     },
     "crane_2": {
       "locked": {
-        "lastModified": 1734808813,
-        "narHash": "sha256-3aH/0Y6ajIlfy7j52FGZ+s4icVX0oHhqBzRdlOeztqg=",
+        "lastModified": 1742394900,
+        "narHash": "sha256-vVOAp9ahvnU+fQoKd4SEXB2JG2wbENkpqcwlkIXgUC0=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "72e2d02dbac80c8c86bf6bf3e785536acf8ee926",
+        "rev": "70947c1908108c0c551ddfd73d4f750ff2ea67cd",
         "type": "github"
       },
       "original": {
@@ -110,16 +110,16 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1750265873,
-        "narHash": "sha256-CfrL4ESjeSXjtR2teAT6WV/3Ozs3JNJoqBRvRrKdEE4=",
+        "lastModified": 1751576233,
+        "narHash": "sha256-skAlu2PdU2IMZsCi1tSBqx8gfFBhBWroy1NTafhZ0fE=",
         "owner": "penumbra-zone",
         "repo": "penumbra",
-        "rev": "edb3d5f2cb1335880ae6ecdc10192f48d62edd16",
+        "rev": "c0927a38bb1cca2ac3b85aef77e7cf0c58166884",
         "type": "github"
       },
       "original": {
         "owner": "penumbra-zone",
-        "ref": "v2.0.1",
+        "ref": "v2.0.2",
         "repo": "penumbra",
         "type": "github"
       }
@@ -134,16 +134,16 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1750265873,
-        "narHash": "sha256-CfrL4ESjeSXjtR2teAT6WV/3Ozs3JNJoqBRvRrKdEE4=",
+        "lastModified": 1751576233,
+        "narHash": "sha256-skAlu2PdU2IMZsCi1tSBqx8gfFBhBWroy1NTafhZ0fE=",
         "owner": "penumbra-zone",
         "repo": "penumbra",
-        "rev": "edb3d5f2cb1335880ae6ecdc10192f48d62edd16",
+        "rev": "c0927a38bb1cca2ac3b85aef77e7cf0c58166884",
         "type": "github"
       },
       "original": {
         "owner": "penumbra-zone",
-        "ref": "v2.0.1",
+        "ref": "v2.0.2",
         "repo": "penumbra",
         "type": "github"
       }
@@ -165,11 +165,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1735093658,
-        "narHash": "sha256-eIUYGDtairggo7+JXSwN7b6Zr03BJ7tsZL/U0NkDr0s=",
+        "lastModified": 1743042789,
+        "narHash": "sha256-yPlxN0r3pQjUIwyX/qeWSTdpHjWy/AfmM0PK1bYkO18=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "ca249a1d98eff27e92665ac462b9d47f58141925",
+        "rev": "b4d2dee9d16e7725b71969f28862ded3a94a7934",
         "type": "github"
       },
       "original": {
@@ -186,11 +186,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1735093658,
-        "narHash": "sha256-eIUYGDtairggo7+JXSwN7b6Zr03BJ7tsZL/U0NkDr0s=",
+        "lastModified": 1743042789,
+        "narHash": "sha256-yPlxN0r3pQjUIwyX/qeWSTdpHjWy/AfmM0PK1bYkO18=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "ca249a1d98eff27e92665ac462b9d47f58141925",
+        "rev": "b4d2dee9d16e7725b71969f28862ded3a94a7934",
         "type": "github"
       },
       "original": {
@@ -206,11 +206,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1740536993,
-        "narHash": "sha256-3YI+1ONZ28chM19Hep9Z+TSyiybYf/1VC/gwImVZKUw=",
+        "lastModified": 1752028888,
+        "narHash": "sha256-LRj3/PUpII6taWOrX1w/OeI6f1ncND02PP/kEHvPCqU=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "9f05c0655de9dc2c7b60b689447c48abb9190bf8",
+        "rev": "a0f1c656e053463b47639234b151a05e4441bb19",
         "type": "github"
       },
       "original": {
