@@ -69,7 +69,7 @@ impl Cli {
     pub fn check_deps(&self) -> anyhow::Result<()> {
         // let wanted_programs = vec!["pindexer", "pg_dump", "psql", "kubectl"];
         let wanted_programs = vec![
-            "pindexer",
+            // "pindexer",
             "pg_dump",
             "pg_restore",
             "psql",
