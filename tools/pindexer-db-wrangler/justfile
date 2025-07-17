@@ -6,6 +6,10 @@ help:
 check:
   cargo check --all-features --all-targets
 
+# Clear out local data dirs
+clean:
+  rm -rf testnet-reindex-1 mainnet-reindex-1
+
 # Run the reindex against PL testnet
 testnet:
   rm -rf testnet-reindex-1

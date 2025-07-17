@@ -1,0 +1,5 @@
+use flake .
+
+# Update the below with correct database URLs for remote dbs that should be dumped locally.
+export pindexer_src_db_mainnet="postgresql://penumbra:penumbra@127.0.0.1:5432/penumbra_raw"
+export pindexer_dst_db_mainnet="postgresql://penumbra:penumbra@127.0.0.1:5432/pindexer"
