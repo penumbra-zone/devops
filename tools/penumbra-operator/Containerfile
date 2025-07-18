@@ -14,7 +14,7 @@ FROM debian:bookworm AS runtime
 ARG USERNAME=penumbra
 ARG UID=1000
 ARG GID=1000
-LABEL maintainer=root@ruin.dev
+LABEL maintainer=team@penumbralabs.xyz
 
 # Create normal user
 RUN groupadd --gid ${GID} ${USERNAME} \

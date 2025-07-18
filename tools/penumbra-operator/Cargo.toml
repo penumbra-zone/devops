@@ -2,6 +2,7 @@
 name = "penumbra-operator"
 version = "0.2.6"
 edition = "2021"
+description = "k8s operator for running Penumbra resources"
 default-run = "penumbra-operator"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
