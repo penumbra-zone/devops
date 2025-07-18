@@ -1,0 +1,122 @@
+{{ if eq .Values.deploymentKind "Deployment" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "plapp.fullname" . }}
+  labels:
+    {{- include "plapp.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+  selector:
+    matchLabels:
+      {{- include "plapp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "plapp.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "plapp.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+
+      {{- if not .Values.maintenanceMode }}
+      {{- if .Values.initContainerCmd }}
+      initContainers:
+        - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: {{ .Release.Name }}-init
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          {{- with .Values.initContainerCmd }}
+          command:
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- with (concat .Values.containerEnv .Values.containerEnvFromSecrets) }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+          - name: {{ .Release.Name }}
+            mountPath: {{ .Values.persistence.mountPath }}
+            readOnly: {{ .Values.persistence.readOnly }}
+          {{- end }}
+          {{- with .Values.extraVolumeMounts }}
+          {{- toYaml . | nindent 8 }}
+          {{- end }}
+      {{- end }}
+      {{- end }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.maintenanceMode }}
+          command:
+            - sleep
+            - infinity
+          {{- else }}
+          {{- with .Values.containerCmd }}
+          command:
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- end }}
+          {{- with (concat .Values.containerEnv .Values.containerEnvFromSecrets) }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.service.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- if .Values.service.healthCheck.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.service.port }}
+            periodSeconds: {{ .Values.service.healthCheck.periodSeconds }}
+            timeoutSeconds: {{ .Values.service.healthCheck.timeoutSeconds }}
+          {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: {{ .Release.Name }}
+              mountPath: {{ .Values.persistence.mountPath }}
+              readOnly: {{ .Values.persistence.readOnly }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: {{ .Release.Name }}
+          persistentVolumeClaim:
+            claimName: {{ include "plapp.fullname" . }}
+      {{- end }}
+{{- end }}
