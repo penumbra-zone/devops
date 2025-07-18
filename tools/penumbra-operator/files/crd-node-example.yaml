@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: penumbra-operator-testing
+---
+apiVersion: penumbra.zone/v1alpha1
+kind: PenumbraNode
+metadata:
+  name: norbert
+  namespace: penumbra-operator-testing
+spec:
+  moniker: norbert
+  # use genesis-validator to bootstrap, assumes integration tests have been run
+  bootstrap_url: "http://penumbra-node-penumbra-devnet-55-val-0:26657"
+  # network_name: testnet-preview

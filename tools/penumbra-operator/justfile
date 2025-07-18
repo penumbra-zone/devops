@@ -1,0 +1,74 @@
+# rerun the penumbra-operator against the present k8s context
+dev:
+  cargo watch -c -x run
+
+# run the penumbra-operator against the present k8s context
+run:
+  cargo run
+
+# restart all running statefulsets managed by the operator
+bounce:
+  kubectl -n penumbra get sts -o name | xargs -r kubectl -n penumbra rollout restart
+
+# run cargo check
+check:
+  cargo check --all-targets --all-features
+  cargo clippy --fix
+
+# build all targets
+build:
+  @just check
+  cargo build --all-targets --all-features
+  cargo build -r
+  cargo doc
+
+doc:
+  @just docs
+
+# build rust documentation, serve via livereload
+docs:
+    cargo watch -w src -c -s "cargo doc && python3 -m http.server --directory target/doc"
+
+# lint all project files
+lint:
+  @just shellcheck
+  @just check
+  nix flake check --all-systems
+
+# assume operator is running, and deploy an example node
+deploy:
+  @just integration
+
+# Nuke everything: warning, destructive action!
+nuke:
+  # delete all penumbra-operator resources in the namespace "penumbra-operator-testing"
+  kubectl -n penumbra-operator-testing get penumbranodes -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
+  kubectl -n penumbra-operator-testing get penumbranetworks -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
+  kubectl -n penumbra-operator-testing get pvc -o name | xargs -r kubectl -n penumbra-operator-testing delete --cascade=foreground
+
+# build the containerfile for the operator
+container:
+  podman build -t ghcr.io/penumbra-zone/penumbra-operator .
+
+# run shellcheck on scripts
+shellcheck:
+  @just print-shellscripts \
+        | xargs -r shellcheck -x
+
+# display paths for shell scripts in project
+print-shellscripts:
+    fd -t f -X file --mime  | perl -F: -lanE '$F[1] =~ /text\/x-shellscript/ and say $F[0]'
+
+# apply the k8s rbac rules, for integration tests
+rbac:
+  kubectl apply -f files/crd-rbac.yaml
+
+# run tests, both unit and integration
+test:
+  cargo nextest run --nocapture
+  cargo nextest run --features network-integration
+
+# run integration tests; PERFORMS DESTRUCTIVE ACTIONS AGAINST REAL CLUSTER
+integration:
+  RUST_LOG=penumbra-reindexer=debug cargo nextest run --features network-integration --nocapture
+  # RUST_LOG=debug cargo test --features network-integration -- --nocapture

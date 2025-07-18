@@ -1,0 +1,90 @@
+#!/bin/bash
+# Entrypoint script for initContainer for Penumbra node.
+set -euo pipefail
+
+
+
+# we must write into a subdir of the volumeMount, because the "--network-dir" arg
+# to "pd network join" must point to a non-existent directory, and the volumeMount
+# will always exist.
+penumbra_network_dir="/home/penumbra/.penumbra/network_data"
+
+# Only munge state if there's a bootstrap url set.
+if [[ -n "${PENUMBRA_BOOTSTRAP_URL:-}" ]] ; then
+
+    if ! test -d "$penumbra_network_dir" ; then
+        >&2 echo "No pre-existing network data, pulling fresh info"
+        # shellcheck disable=SC2086
+        pd network --network-dir "$penumbra_network_dir" join \
+            --tendermint-p2p-bind 0.0.0.0:26656 \
+            --tendermint-rpc-bind 0.0.0.0:26657 \
+            "$PENUMBRA_BOOTSTRAP_URL"
+
+        if [[ -n "${PENUMBRA_CUSTOM_ARCHIVE_URL:-}" ]] ; then
+            dest_archive="${penumbra_network_dir}/$(basename "$PENUMBRA_CUSTOM_ARCHIVE_URL")"
+            >&2 echo "Downloading archive from $PENUMBRA_CUSTOM_ARCHIVE_URL ..."
+            while true; do sleep 300; ls -sh "$dest_archive"; done &
+            curl -# -sSfL -o "$dest_archive" "$PENUMBRA_CUSTOM_ARCHIVE_URL"
+            >&2 echo "Extracting archive..."
+            tar -xzf "$dest_archive" -C "${penumbra_network_dir}/node0/"
+            >&2 echo "Done, archive extracted"
+            # Clean up archive because it's probably ~100GB
+            rm -vf "$dest_archive"
+        fi
+    fi
+
+    # Begin customization of CometBFT config
+    if [[ "${PENUMBRA_COMETBFT_INDEXER:-}" = "psql" ]] ; then
+        >&2 echo "INFO: Enabling CometBFT event indexing";
+        # The operator will set this env var, so it should always be defined, but let's confirm.
+        if [[ -z "${COMETBFT_POSTGRES_CONNECTION_URL:-}" ]]; then
+            >&2 echo "ERROR: CometBFT event indexing was requested, but COMETBFT_POSTGRES_CONNECTION_URL is undefined";
+            exit 1
+        fi
+
+        # Sure would be nice to have a TOML-aware editing capability here. Oh, well.
+        sed -i -e "/^psql-conn/d ; s#^indexer.*#indexer = \"psql\"\\npsql-conn = \"$COMETBFT_POSTGRES_CONNECTION_URL\"#" \
+            "${penumbra_network_dir}/node0/cometbft/config/config.toml"
+    else
+        >&2 echo "INFO: Skipping configuration of CometBFT event indexing";
+        # Disable indexing, in case spec changed from enable_indexing=false -> true.
+        sed -i -e "/^psql-conn/d ; s#^indexer.*#indexer = \"kv\"#" \
+            "${penumbra_network_dir}/node0/cometbft/config/config.toml"
+    fi
+
+    if [[ -n "${PENUMBRA_COMETBFT_SEEDS:-}" ]] ; then
+        >&2 echo "INFO: Setting CometBFT peers '${PENUMBRA_COMETBFT_SEEDS}'"
+        sed -i -e "s#^seeds.*#seeds = \"$PENUMBRA_COMETBFT_SEEDS\"#" \
+            "${penumbra_network_dir}/node0/cometbft/config/config.toml"
+    fi
+
+else
+    >&2 echo "INFO: No bootstrap URL set, not touching local state"
+    set +e
+    find "$penumbra_network_dir"
+    ls -lR "$penumbra_network_dir"
+    find /home/penumbra
+    ls -lR /home/penumbra
+    grep -i seed /home/penumbra/.penumbra/network_data/node0/cometbft/config/config.toml
+    exit 0
+fi
+
+>&2 echo "INFO: Setting volume ownership and permissions"
+# set ownership for pd user
+chown -R 1000:1000 "$penumbra_network_dir/node0"
+
+# set ownership for cometbft configs to match cometbft container "tmuser" uid/gid
+chown -R 100:1000 "${penumbra_network_dir}/node0/cometbft"
+
+# Create a postgresql subdir for storing database.
+if [[ "${PENUMBRA_COMETBFT_INDEXER:-}" = "psql" ]] ; then
+  >&2 echo "DEBUG: Configuring postgres perms"
+  pg_dir="${penumbra_network_dir}/node0/postgresql"
+  mkdir -p "$pg_dir"
+  chmod 0750 "$pg_dir"
+  # Set appropriate perms for the upstream postgres container, where user "postgres"
+  # has uid and gid 999.
+  chown -R 999:999 "$pg_dir"
+fi
+
+>&2 echo "INFO: Finished pd-init"

@@ -1,0 +1,5 @@
+use flake
+
+# consider adding a KUBECONFIG if none already found at
+# ~/.kube/config
+# export KUBECONFIG=path/to/kubeconfig

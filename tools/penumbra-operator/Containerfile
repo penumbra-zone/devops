@@ -1,0 +1,29 @@
+FROM rust:slim-bullseye AS builder
+
+WORKDIR /app
+# cache deps
+COPY Cargo.toml Cargo.lock .
+RUN mkdir -p .cargo && cargo vendor > .cargo/config.toml
+
+# build app
+COPY . /app
+RUN cargo build --release
+
+FROM debian:bookworm AS runtime
+
+ARG USERNAME=penumbra
+ARG UID=1000
+ARG GID=1000
+LABEL maintainer=team@penumbralabs.xyz
+
+# Create normal user
+RUN groupadd --gid ${GID} ${USERNAME} \
+        && useradd -l -m -d /home/${USERNAME} -g ${GID} -u ${UID} ${USERNAME}
+
+# Install binary
+COPY --from=builder /app/target/release/penumbra-operator /usr/bin/penumbra-operator
+
+USER penumbra
+
+# Running just the operator will fail, without `~/.kube/config` mounted in from somewhere.
+CMD ["/usr/bin/penumbra-operator"]

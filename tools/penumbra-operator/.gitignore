@@ -1,0 +1,6 @@
+target/
+
+
+.direnv/
+# copy from `.envrc.example`
+.envrc
