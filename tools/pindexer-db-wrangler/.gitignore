@@ -1,0 +1,16 @@
+/target
+
+# direnv and friends
+.direnv/
+.env
+.envrc
+
+# artifacts
+*.dump
+*.tar
+*.gz
+*.sqlite
+
+# working directories for active reindexing
+/mainnet-reindex-1
+/testnet-reindex-1
