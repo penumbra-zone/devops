@@ -1,0 +1,20 @@
+# upload all local artifacts to s3 storage
+push:
+  aws s3 sync ./artifacts/ s3://penumbra-labs-artifact-storage/ --acl public-read
+
+# push all artifacts to PL-hosted storage box
+push-legacy:
+  # rsync -a -e ssh --rsync-path 'sudo rsync' --partial-dir=.rsync-partial --info=progress2 ./artifacts/ artifacts.plinfra.net:/mnt/artifacts_1/artifacts/ --checksum
+  rsync -a -e ssh --rsync-path 'sudo rsync' --partial-dir=.rsync-partial --info=progress2 ./artifacts/ artifacts.plinfra.net:/mnt/artifacts_1/artifacts/
+
+# synchronize all artifacts to localhost; WARNING, requires several TB of disk space!
+pull:
+  aws s3 sync s3://penumbra-labs-artifact-storage/ ./artifacts/
+
+# find possible duplicate files
+fdupes:
+  fclones group .
+
+# display recently changed files
+recent:
+  fd --no-ignore --changed-within 1w

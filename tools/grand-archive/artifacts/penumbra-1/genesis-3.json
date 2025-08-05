@@ -1,0 +1,31 @@
+{
+  "genesis_time": "2025-04-08T22:21:17.566468646Z",
+  "chain_id": "penumbra-1",
+  "initial_height": "4378762",
+  "consensus_params": {
+    "block": {
+      "max_bytes": "1048576",
+      "max_gas": "-1",
+      "time_iota_ms": "500"
+    },
+    "evidence": {
+      "max_age_num_blocks": "130000",
+      "max_age_duration": "650000000000000",
+      "max_bytes": "30720"
+    },
+    "validator": {
+      "pub_key_types": [
+        "ed25519"
+      ]
+    },
+    "version": {
+      "app": "0"
+    },
+    "abci": {}
+  },
+  "validators": [],
+  "app_hash": "2CE4CA98EBDB0E6EFEB43394B59E61A104931430E729853FB36E86DA35CB0F51",
+  "app_state": {
+    "genesisCheckpoint": "LOTKmOvbDm7+tDOUtZ5hoQSTFDDnKYU/s26G2jXLD1E="
+  }
+}

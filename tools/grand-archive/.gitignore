@@ -1,0 +1,14 @@
+# ignore all archive formats
+*.bin
+*.dump
+*.gz
+*.lz4
+*.sql
+*.sqlite
+*.sqlite3
+*.tar
+
+
+# direnv and friends
+.direnv/
+.envrc
