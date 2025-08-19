@@ -36,6 +36,11 @@ aws s3 sync s3://penumbra-labs-artifact-storage/ \
 Note that the `--endpoint-url` and `--destination-endpoint-url` flags must match the object storage providers
 used for the source and destination archives, respectively.
 
+If you want to copy the assets locally, there's a convenient target `just pull` that you can use.
+If you encounter an error `fatal error: Unable to locate credentials`, use the `just dummy-auth` target
+to configure placeholder credentials for the object storage API calls, so that you can replicate the source
+bucket without authenticating.
+
 ## Known examples
 
 The original object storage for Penumbra node archives was located at https://penumbra-labs-artifact-storage.nyc3.digitaloceanspaces.com/.

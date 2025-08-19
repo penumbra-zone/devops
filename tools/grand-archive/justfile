@@ -9,7 +9,7 @@ push-legacy:
 
 # synchronize all artifacts to localhost; WARNING, requires several TB of disk space!
 pull:
-  aws s3 sync s3://penumbra-labs-artifact-storage/ ./artifacts/
+  aws s3 sync --endpoint-url https://nyc3.digitaloceanspaces.com s3://penumbra-labs-artifact-storage/ ./artifacts/ --no-sign-request
 
 # find possible duplicate files
 fdupes:
@@ -18,3 +18,9 @@ fdupes:
 # display recently changed files
 recent:
   fd --no-ignore --changed-within 1w
+
+# configure dummy auth
+dummy-auth:
+  aws configure set aws_access_key_id dummy
+  aws configure set aws_secret_access_key dummy
+  aws configure set default.region us-east-1
